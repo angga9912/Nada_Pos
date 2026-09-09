@@ -92,6 +92,7 @@ fun PengaturanTokoScreen(viewModel: PengaturanTokoViewModel = hiltViewModel()) {
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
                 Text("Paket aktif: ${statusLisensi.paket.label}", style = MaterialTheme.typography.bodyMedium)
+                val kadaluarsaMillis = statusLisensi.kadaluarsaMillis
                 when {
                     statusLisensi.paket == PaketAplikasi.BASIC -> Text(
                         "Upgrade ke Custom/Pro untuk membuka lebih banyak fitur.",
@@ -101,8 +102,8 @@ fun PengaturanTokoScreen(viewModel: PengaturanTokoViewModel = hiltViewModel()) {
                         "Lisensi permanen - tidak pernah kadaluarsa.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    statusLisensi.kadaluarsaMillis != null -> Text(
-                        "Aktif sampai: ${java.text.SimpleDateFormat("dd MMMM yyyy", java.util.Locale("id","ID")).format(java.util.Date(statusLisensi.kadaluarsaMillis))}",
+                    kadaluarsaMillis != null -> Text(
+                        "Aktif sampai: ${java.text.SimpleDateFormat("dd MMMM yyyy", java.util.Locale("id","ID")).format(java.util.Date(kadaluarsaMillis))}",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }

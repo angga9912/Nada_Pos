@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Ikon sederhana keranjang/kasir sebagai placeholder. Ganti dengan logo toko di Phase 4. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,74 L74,74 L74,80 L34,80 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,40 L78,40 L72,68 L36,68 Z" />
+    <!-- roda kiri (lingkaran digambar sebagai path, VectorDrawable tidak punya elemen <circle>) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M40,81 a5,5 0 1,0 0.1,0 Z" />
+    <!-- roda kanan -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M68,81 a5,5 0 1,0 0.1,0 Z" />
+</vector>
