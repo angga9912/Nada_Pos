@@ -1,0 +1,46 @@
+name: Build & Test NADA KASIR CUSTOM
+
+# Jalan otomatis setiap push/PR ke main, dan bisa dipicu manual dari tab Actions
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout kode
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Beri izin eksekusi gradlew
+        run: chmod +x gradlew
+
+      - name: Jalankan Unit Test (Phase 1)
+        run: ./gradlew testDemoDebugUnitTest --no-daemon
+
+      - name: Build APK Debug (flavor demo)
+        run: ./gradlew assembleDemoDebug --no-daemon
+
+      - name: Upload APK sebagai artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nada-kasir-custom-demo-debug
+          path: app/build/outputs/apk/demo/debug/*.apk
+          if-no-files-found: error
+
+      - name: Upload laporan unit test
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: app/build/reports/tests/
