@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Folder export Excel & backup ada di app-specific external storage,
+         tidak butuh izin WRITE_EXTERNAL_STORAGE di Android modern -->
+    <external-files-path name="export" path="export/" />
+    <external-files-path name="backup" path="backup/" />
+</paths>
