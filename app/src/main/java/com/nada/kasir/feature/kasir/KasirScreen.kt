@@ -1,6 +1,8 @@
 package com.nada.kasir.feature.kasir
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -341,7 +343,7 @@ private fun PembayaranDialog(total: Double, onDismiss: () -> Unit, onKonfirmasi:
         onDismissRequest = onDismiss,
         title = { Text("Pembayaran") },
         text = {
-            Column {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Text("Total: ${CurrencyFormatter.format(total)}", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -359,24 +361,148 @@ private fun PembayaranDialog(total: Double, onDismiss: () -> Unit, onKonfirmasi:
                     }
                 }
                 if (metode == MetodePembayaran.TUNAI) {
-                    OutlinedTextField(
-                        value = uangDiterimaText,
-                        onValueChange = { uangDiterimaText = it },
-                        label = { Text("Uang diterima") },
-                        modifier = Modifier.fillMaxWidth()
+                    Spacer(Modifier.height(4.dp))
+                    PembayaranTunaiInput(
+                        uangDiterimaText = uangDiterimaText,
+                        onUangDiterimaTextChange = { uangDiterimaText = it },
+                        total = total
                     )
-                    Text("Kembalian: ${CurrencyFormatter.format(if (kembalian > 0) kembalian else 0.0)}")
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Kembalian: ${CurrencyFormatter.format(if (kembalian > 0) kembalian else 0.0)}",
+                        style = MaterialTheme.typography.titleMedium
+                    )
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                val jumlah = if (metode == MetodePembayaran.TUNAI) uangDiterima else total
-                onKonfirmasi(metode, jumlah, namaPembeli.ifBlank { null })
-            }) { Text("Konfirmasi") }
+            TextButton(
+                onClick = {
+                    val jumlah = if (metode == MetodePembayaran.TUNAI) uangDiterima else total
+                    onKonfirmasi(metode, jumlah, namaPembeli.ifBlank { null })
+                },
+                enabled = metode != MetodePembayaran.TUNAI || uangDiterima > 0.0
+            ) { Text("Konfirmasi") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
     )
+}
+
+/** Pecahan uang tunai yang paling sering dipakai pembeli untuk transaksi kasir. */
+private val PECAHAN_UANG_UMUM = listOf(10_000.0, 20_000.0, 50_000.0, 100_000.0)
+
+/**
+ * Input "uang diterima" saat bayar tunai. Defaultnya kasir cukup sentuh salah satu
+ * pecahan umum (10rb/20rb/50rb/100rb) atau "Uang Pas". Kalau nominal dari pembeli
+ * tidak ada di pilihan itu, kasir bisa buka keypad angka bergaya kalkulator untuk
+ * mengetik nominal manual - tanpa perlu keyboard sistem Android yang penuh.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun PembayaranTunaiInput(
+    uangDiterimaText: String,
+    onUangDiterimaTextChange: (String) -> Unit,
+    total: Double
+) {
+    var modeManual by remember { mutableStateOf(false) }
+    val uangDiterima = uangDiterimaText.toDoubleOrNull() ?: 0.0
+
+    Column {
+        Text("Uang diterima", style = MaterialTheme.typography.labelMedium)
+        Spacer(Modifier.height(4.dp))
+
+        // Layar penampil nominal, mirip kalkulator, biar kasir yakin sebelum konfirmasi.
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = CurrencyFormatter.format(uangDiterima),
+                style = MaterialTheme.typography.headlineSmall,
+                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                modifier = Modifier.fillMaxWidth().padding(12.dp)
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+
+        // Pilihan cepat pecahan uang umum.
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            PECAHAN_UANG_UMUM.forEach { nominal ->
+                FilterChip(
+                    selected = !modeManual && uangDiterima == nominal,
+                    onClick = {
+                        modeManual = false
+                        onUangDiterimaTextChange(nominal.toLong().toString())
+                    },
+                    label = {
+                        Text(
+                            CurrencyFormatter.format(nominal),
+                            maxLines = 1,
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+
+        TextButton(onClick = {
+            modeManual = false
+            onUangDiterimaTextChange(total.toLong().toString())
+        }) {
+            Text("Uang Pas (${CurrencyFormatter.format(total)})")
+        }
+
+        if (!modeManual) {
+            TextButton(onClick = { modeManual = true }) {
+                Text("Nominal lain? Ketik manual")
+            }
+        } else {
+            Spacer(Modifier.height(4.dp))
+            KeypadKalkulator(
+                onAngka = { digit ->
+                    val gabungan = (uangDiterimaText + digit).trimStart('0')
+                    onUangDiterimaTextChange(gabungan)
+                },
+                onHapus = { onUangDiterimaTextChange(uangDiterimaText.dropLast(1)) },
+                onBersihkan = { onUangDiterimaTextChange("") }
+            )
+        }
+    }
+}
+
+/** Keypad angka gaya kalkulator (0-9, hapus satu digit, bersihkan semua). */
+@Composable
+private fun KeypadKalkulator(onAngka: (String) -> Unit, onHapus: () -> Unit, onBersihkan: () -> Unit) {
+    val barisTombol = listOf(
+        listOf("1", "2", "3"),
+        listOf("4", "5", "6"),
+        listOf("7", "8", "9"),
+        listOf("C", "0", "⌫")
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+        barisTombol.forEach { baris ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                baris.forEach { label ->
+                    OutlinedButton(
+                        onClick = {
+                            when (label) {
+                                "C" -> onBersihkan()
+                                "⌫" -> onHapus()
+                                else -> onAngka(label)
+                            }
+                        },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text(label, style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

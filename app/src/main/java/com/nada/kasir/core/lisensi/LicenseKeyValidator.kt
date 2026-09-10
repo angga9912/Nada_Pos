@@ -3,65 +3,90 @@ package com.nada.kasir.core.lisensi
 import com.nada.kasir.core.paket.PaketAplikasi
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.TimeZone
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * Validasi kode aktivasi lisensi secara OFFLINE (tanpa server/internet).
+ * Hasil validasi kode lisensi yang berhasil diparsing.
+ *
+ * @param tier Paket aplikasi yang diaktifkan oleh kode ini (PRO / CUSTOM).
+ * @param kadaluarsaMillis Waktu kadaluarsa lisensi dalam epoch millis (UTC),
+ *   atau null jika lisensi berlaku seumur hidup (LIFETIME).
+ */
+data class HasilValidasiLisensi(
+    val tier: PaketAplikasi,
+    val kadaluarsaMillis: Long?
+)
+
+/**
+ * Validator kode aktivasi lisensi offline untuk fitur berbayar (PRO / CUSTOM).
  *
  * Format kode: NADA-{TIER}-{EXPIRY}-{CHECKSUM}
- *   TIER     = CUSTOM atau PRO
- *   EXPIRY   = YYYYMMDD (tanggal kadaluarsa langganan) ATAU "LIFETIME" (sekali bayar, tidak pernah expired)
- *   CHECKSUM = 8 karakter HMAC-SHA256, dihitung dari TIER+EXPIRY memakai SECRET yang sama
- *              dengan generator (lihat tools/generate_license.py)
+ *  - TIER      : PRO atau CUSTOM. BASIC tidak butuh kode aktivasi (gratis) sehingga
+ *                kode dengan tier BASIC selalu ditolak.
+ *  - EXPIRY    : "LIFETIME" (berlaku selamanya) atau tanggal kadaluarsa "yyyyMMdd".
+ *  - CHECKSUM  : 8 karakter pertama dari hex HMAC-SHA256("TIER:EXPIRY", SECRET).
  *
- * PENTING - batasan keamanan yang harus dipahami pemilik bisnis:
- * Karena SECRET ini ikut ter-bundle di dalam APK, secara teori APK bisa
- * di-reverse-engineer untuk menemukan SECRET dan membuat kode palsu sendiri.
- * Ini adalah trade-off umum untuk software kecil-menengah tanpa server lisensi
- * terpusat (banyak software indie/UMKM memakai pendekatan serupa). Untuk
- * proteksi lebih kuat di masa depan, pertimbangkan validasi online ke server.
+ * Kode tidak sensitif huruf besar/kecil. Pembuatan kode dilakukan lewat
+ * tools/generate_license.py yang harus memakai SECRET yang sama persis dengan di sini.
  */
 object LicenseKeyValidator {
 
-    // GANTI nilai ini dengan string rahasia Anda sendiri sebelum merilis ke publik,
-    // dan JANGAN commit nilai asli ke repository publik (pakai gradle.properties
-    // lokal + BuildConfig kalau mau lebih rapi).
-    private const val SECRET = "GANTI_DENGAN_SECRET_RAHASIA_ANDA_SEBELUM_RILIS"
+    // PENTING: SECRET ini harus identik dengan yang dipakai tools/generate_license.py
+    // untuk membuat kode lisensi. Jangan pernah membagikan/commit nilai produksi asli
+    // ke repo publik - siapapun yang tahu SECRET ini bisa membuat kode lisensi palsu.
+    private const val SECRET = "NADA-KASIR-LICENSE-SECRET-2024-GANTI-SEBELUM-RILIS"
 
-    data class HasilAktivasi(val tier: PaketAplikasi, val kadaluarsaMillis: Long?) // null = LIFETIME
+    private const val PREFIX = "NADA"
+    private const val EXPIRY_LIFETIME = "LIFETIME"
+    private const val EXPIRY_DATE_PATTERN = "yyyyMMdd"
+    private const val PANJANG_CHECKSUM = 8
 
-    fun validasi(kodeMentah: String): HasilAktivasi? {
-        val kode = kodeMentah.trim().uppercase(Locale.ROOT)
-        val bagian = kode.split("-")
-        if (bagian.size != 4 || bagian[0] != "NADA") return null
+    /**
+     * Validasi sebuah kode lisensi.
+     *
+     * @return [HasilValidasiLisensi] jika kode valid (format benar, checksum cocok,
+     *   dan tier bukan BASIC), atau null jika kode tidak valid dalam bentuk apapun.
+     */
+    fun validasi(kode: String): HasilValidasiLisensi? {
+        if (kode.isBlank()) return null
 
-        val tierStr = bagian[1]
-        val expiryStr = bagian[2]
-        val checksumDiberikan = bagian[3]
+        val bagian = kode.trim().uppercase(Locale.ROOT).split("-")
+        if (bagian.size != 4) return null
 
-        val tier = runCatching { PaketAplikasi.valueOf(tierStr) }.getOrNull() ?: return null
-        if (tier == PaketAplikasi.BASIC) return null // Basic tidak butuh kode, selalu gratis
+        val (prefix, tierMentah, expiry, checksum) = bagian
+        if (prefix != PREFIX) return null
 
-        val checksumBenar = hitungChecksum(tierStr, expiryStr)
-        if (checksumDiberikan != checksumBenar) return null
+        val tier = runCatching { PaketAplikasi.valueOf(tierMentah) }.getOrNull() ?: return null
+        // BASIC gratis dan tidak pernah butuh kode aktivasi - tolak meski checksum-nya "valid".
+        if (tier == PaketAplikasi.BASIC) return null
 
-        val kadaluarsaMillis: Long? = if (expiryStr == "LIFETIME") {
+        val checksumSeharusnya = hitungChecksum(tierMentah, expiry)
+        if (!checksum.equals(checksumSeharusnya, ignoreCase = true)) return null
+
+        val kadaluarsaMillis = if (expiry == EXPIRY_LIFETIME) {
             null
         } else {
-            val sdf = SimpleDateFormat("yyyyMMdd", Locale.US)
-            sdf.isLenient = false
-            val tanggal = runCatching { sdf.parse(expiryStr) }.getOrNull() ?: return null
-            tanggal.time
+            parseTanggalExpiry(expiry) ?: return null
         }
 
-        return HasilAktivasi(tier, kadaluarsaMillis)
+        return HasilValidasiLisensi(tier = tier, kadaluarsaMillis = kadaluarsaMillis)
     }
 
     private fun hitungChecksum(tier: String, expiry: String): String {
         val mac = Mac.getInstance("HmacSHA256")
-        mac.init(SecretKeySpec(SECRET.toByteArray(Charsets.UTF_8), "HmacSHA256"))
-        val hasil = mac.doFinal("$tier:$expiry".toByteArray(Charsets.UTF_8))
-        return hasil.joinToString("") { "%02X".format(it) }.take(8)
+        mac.init(SecretKeySpec(SECRET.toByteArray(), "HmacSHA256"))
+        val hash = mac.doFinal("$tier:$expiry".toByteArray())
+        return hash.joinToString("") { "%02X".format(it) }.take(PANJANG_CHECKSUM)
+    }
+
+    private fun parseTanggalExpiry(expiry: String): Long? {
+        if (expiry.length != 8 || expiry.any { !it.isDigit() }) return null
+        val format = SimpleDateFormat(EXPIRY_DATE_PATTERN, Locale.ROOT).apply {
+            isLenient = false
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+        return runCatching { format.parse(expiry)?.time }.getOrNull()
     }
 }
