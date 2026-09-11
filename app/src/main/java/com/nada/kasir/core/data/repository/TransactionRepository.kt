@@ -37,7 +37,8 @@ class TransactionRepository @Inject constructor(
         diskonTotal: Double,
         metode: MetodePembayaran,
         jumlahDiterima: Double,
-        namaPembeli: String? = null
+        namaPembeli: String? = null,
+        catatanMetode: String? = null
     ): Result<Long> {
         val subtotal = items.sumOf { it.harga * it.qty }
         val total = subtotal - diskonTotal
@@ -92,7 +93,8 @@ class TransactionRepository @Inject constructor(
                         transactionId = trxId,
                         metode = metode,
                         jumlahDiterima = jumlahDiterima,
-                        kembalian = kembalian
+                        kembalian = kembalian,
+                        catatanMetode = catatanMetode?.trim()?.ifBlank { null }
                     )
                 )
 

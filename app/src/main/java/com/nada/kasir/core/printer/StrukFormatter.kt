@@ -1,6 +1,7 @@
 package com.nada.kasir.core.printer
 
 import android.graphics.BitmapFactory
+import com.nada.kasir.core.data.local.entity.MetodePembayaran
 import com.nada.kasir.core.data.local.entity.PaymentEntity
 import com.nada.kasir.core.data.local.entity.StoreEntity
 import com.nada.kasir.core.data.local.entity.TransactionEntity
@@ -85,7 +86,12 @@ object StrukFormatter {
         builder.baris2Kolom("TOTAL", CurrencyFormatter.format(transaction.total), lebar)
         builder.bold(false)
         payment?.let {
-            builder.baris2Kolom(it.metode.name, CurrencyFormatter.format(it.jumlahDiterima), lebar)
+            val labelMetode = if (it.metode == MetodePembayaran.LAINNYA && !it.catatanMetode.isNullOrBlank()) {
+                it.catatanMetode
+            } else {
+                it.metode.name
+            }
+            builder.baris2Kolom(labelMetode, CurrencyFormatter.format(it.jumlahDiterima), lebar)
             if (it.kembalian > 0) {
                 builder.baris2Kolom("KEMBALI", CurrencyFormatter.format(it.kembalian), lebar)
             }
@@ -166,7 +172,12 @@ object StrukFormatter {
         }
         kiriKanan("TOTAL", CurrencyFormatter.format(transaction.total))
         payment?.let {
-            kiriKanan(it.metode.name, CurrencyFormatter.format(it.jumlahDiterima))
+            val labelMetode = if (it.metode == MetodePembayaran.LAINNYA && !it.catatanMetode.isNullOrBlank()) {
+                it.catatanMetode
+            } else {
+                it.metode.name
+            }
+            kiriKanan(labelMetode, CurrencyFormatter.format(it.jumlahDiterima))
             if (it.kembalian > 0) kiriKanan("KEMBALI", CurrencyFormatter.format(it.kembalian))
         }
         garis()

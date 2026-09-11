@@ -3,6 +3,7 @@ package com.nada.kasir.core.di
 import android.content.Context
 import androidx.room.Room
 import com.nada.kasir.core.data.local.AppDatabase
+import com.nada.kasir.core.data.local.MIGRATION_2_3
 import com.nada.kasir.core.data.local.dao.*
 import dagger.Module
 import dagger.Provides
@@ -19,8 +20,9 @@ object DatabaseModule {
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
         return Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.DB_NAME)
-            // fallbackToDestructiveMigration hanya untuk tahap development awal.
-            // Ganti dengan Migration eksplisit sebelum rilis ke pelanggan.
+            .addMigrations(MIGRATION_2_3)
+            // fallbackToDestructiveMigration hanya untuk tahap development awal / lompatan versi
+            // yang belum ada migration eksplisitnya. Ganti dengan Migration eksplisit sebelum rilis.
             .fallbackToDestructiveMigration()
             .build()
     }

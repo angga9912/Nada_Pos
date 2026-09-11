@@ -138,7 +138,7 @@ class KasirViewModel @Inject constructor(
 
     fun setDiskonTotal(nilai: Double) { diskonFlow.value = nilai }
 
-    fun bayar(userId: Long, metode: MetodePembayaran, jumlahDiterima: Double, namaPembeli: String? = null) {
+    fun bayar(userId: Long, metode: MetodePembayaran, jumlahDiterima: Double, namaPembeli: String? = null, catatanMetode: String? = null) {
         viewModelScope.launch {
             prosesBayarFlow.value = true
             val result = transactionRepository.simpanTransaksiKasir(
@@ -147,7 +147,8 @@ class KasirViewModel @Inject constructor(
                 diskonTotal = diskonFlow.value,
                 metode = metode,
                 jumlahDiterima = jumlahDiterima,
-                namaPembeli = namaPembeli
+                namaPembeli = namaPembeli,
+                catatanMetode = catatanMetode
             )
             prosesBayarFlow.value = false
             when (result) {

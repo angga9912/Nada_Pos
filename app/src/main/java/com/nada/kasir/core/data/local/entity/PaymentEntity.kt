@@ -11,5 +11,6 @@ data class PaymentEntity(
     val transactionId: Long,
     val metode: MetodePembayaran,
     val jumlahDiterima: Double,
-    val kembalian: Double
+    val kembalian: Double,
+    val catatanMetode: String? = null // isi manual saat metode == LAINNYA, mis. "Transfer BCA"
 )

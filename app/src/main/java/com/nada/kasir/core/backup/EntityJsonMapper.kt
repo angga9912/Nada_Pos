@@ -101,10 +101,12 @@ object EntityJsonMapper {
     fun paymentToJson(p: PaymentEntity) = JSONObject().apply {
         put("id", p.id); put("transactionId", p.transactionId); put("metode", p.metode.name)
         put("jumlahDiterima", p.jumlahDiterima); put("kembalian", p.kembalian)
+        put("catatanMetode", p.catatanMetode)
     }
     fun paymentFromJson(o: JSONObject, transactionIdBaru: Long) = PaymentEntity(
         transactionId = transactionIdBaru, metode = MetodePembayaran.valueOf(o.getString("metode")),
-        jumlahDiterima = o.getDouble("jumlahDiterima"), kembalian = o.getDouble("kembalian")
+        jumlahDiterima = o.getDouble("jumlahDiterima"), kembalian = o.getDouble("kembalian"),
+        catatanMetode = if (o.has("catatanMetode") && !o.isNull("catatanMetode")) o.getString("catatanMetode") else null
     )
     fun paymentOldTransactionId(o: JSONObject) = o.getLong("transactionId")
 

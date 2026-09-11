@@ -166,9 +166,9 @@ fun KasirScreen(
         PembayaranDialog(
             total = state.total,
             onDismiss = { showPembayaranDialog = false },
-            onKonfirmasi = { metode, jumlahDiterima, namaPembeli ->
+            onKonfirmasi = { metode, jumlahDiterima, namaPembeli, catatanMetode ->
                 showPembayaranDialog = false
-                viewModel.bayar(currentUserId, metode, jumlahDiterima, namaPembeli)
+                viewModel.bayar(currentUserId, metode, jumlahDiterima, namaPembeli, catatanMetode)
             }
         )
     }
@@ -332,12 +332,19 @@ private fun RingkasanBaris(label: String, nilai: Double, tebal: Boolean = false)
 }
 
 @Composable
-private fun PembayaranDialog(total: Double, onDismiss: () -> Unit, onKonfirmasi: (MetodePembayaran, Double, String?) -> Unit) {
+private fun PembayaranDialog(total: Double, onDismiss: () -> Unit, onKonfirmasi: (MetodePembayaran, Double, String?, String?) -> Unit) {
     var metode by remember { mutableStateOf(MetodePembayaran.TUNAI) }
     var uangDiterimaText by remember { mutableStateOf("") }
     var namaPembeli by remember { mutableStateOf("") }
+    var catatanMetodeLainnya by remember { mutableStateOf("") }
     val uangDiterima = uangDiterimaText.toDoubleOrNull() ?: 0.0
     val kembalian = uangDiterima - total
+
+    // Hanya metode yang benar-benar sering dipakai yang ditampilkan (Transfer/Debit/Kartu
+    // Kredit disembunyikan dari kasir, tapi enum-nya tetap utuh supaya transaksi lama dengan
+    // metode itu tetap bisa dibaca). Kalau pembeli bayar dengan cara lain, kasir pilih
+    // "Lainnya" dan tulis manual nama metodenya (mis. "Transfer BCA").
+    val metodeDitampilkan = listOf(MetodePembayaran.TUNAI, MetodePembayaran.QRIS, MetodePembayaran.LAINNYA)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -354,11 +361,20 @@ private fun PembayaranDialog(total: Double, onDismiss: () -> Unit, onKonfirmasi:
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
-                MetodePembayaran.values().forEach { m ->
+                metodeDitampilkan.forEach { m ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = metode == m, onClick = { metode = m })
-                        Text(m.name)
+                        Text(if (m == MetodePembayaran.LAINNYA) "Lainnya" else m.name)
                     }
+                }
+                if (metode == MetodePembayaran.LAINNYA) {
+                    OutlinedTextField(
+                        value = catatanMetodeLainnya,
+                        onValueChange = { catatanMetodeLainnya = it },
+                        label = { Text("Nama metode (mis. Transfer BCA)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
                 if (metode == MetodePembayaran.TUNAI) {
                     Spacer(Modifier.height(4.dp))
@@ -379,9 +395,11 @@ private fun PembayaranDialog(total: Double, onDismiss: () -> Unit, onKonfirmasi:
             TextButton(
                 onClick = {
                     val jumlah = if (metode == MetodePembayaran.TUNAI) uangDiterima else total
-                    onKonfirmasi(metode, jumlah, namaPembeli.ifBlank { null })
+                    val catatan = if (metode == MetodePembayaran.LAINNYA) catatanMetodeLainnya.ifBlank { null } else null
+                    onKonfirmasi(metode, jumlah, namaPembeli.ifBlank { null }, catatan)
                 },
-                enabled = metode != MetodePembayaran.TUNAI || uangDiterima > 0.0
+                enabled = (metode != MetodePembayaran.TUNAI || uangDiterima > 0.0) &&
+                    (metode != MetodePembayaran.LAINNYA || catatanMetodeLainnya.isNotBlank())
             ) { Text("Konfirmasi") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
