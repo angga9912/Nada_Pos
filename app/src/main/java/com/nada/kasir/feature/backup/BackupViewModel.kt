@@ -42,6 +42,34 @@ class BackupViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Simpan file backup terakhir ke [uri] yang dipilih pengguna lewat file picker sistem
+     * Android (Storage Access Framework) - lihat BackupScreen.kt. [uri] bisa mengarah ke
+     * Google Drive kalau pengguna memilih "Drive" di daftar lokasi pada picker tersebut,
+     * TANPA aplikasi ini perlu integrasi/API key Google Drive apa pun secara langsung.
+     */
+    fun simpanBackupKeUri(context: Context, uri: Uri) {
+        val file = _uiState.value.fileBackupTerakhir ?: return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(sedangProses = true)
+            val berhasil = withContext(Dispatchers.IO) {
+                try {
+                    context.contentResolver.openOutputStream(uri)?.use { output ->
+                        file.inputStream().use { input -> input.copyTo(output) }
+                    }
+                    true
+                } catch (e: Exception) {
+                    false
+                }
+            }
+            _uiState.value = _uiState.value.copy(
+                sedangProses = false,
+                pesan = if (berhasil) "Backup berhasil disimpan ke lokasi yang dipilih."
+                        else "Gagal menyimpan backup ke lokasi tersebut. Silakan coba lagi."
+            )
+        }
+    }
+
     fun restoreDariUri(context: Context, uri: Uri) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(sedangProses = true)

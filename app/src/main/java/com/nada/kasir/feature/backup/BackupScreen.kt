@@ -22,6 +22,16 @@ fun BackupScreen(viewModel: BackupViewModel = hiltViewModel()) {
         if (uri != null) showKonfirmasiRestore = uri
     }
 
+    // Membuka file picker sistem Android (Storage Access Framework). "Google Drive" otomatis
+    // muncul sebagai salah satu lokasi penyimpanan di picker ini (kalau aplikasi Google Drive
+    // terpasang & pemilik toko sudah login) - tanpa aplikasi ini perlu integrasi Google Drive
+    // API/OAuth apa pun secara langsung. Pengguna tinggal pilih akun & folder Drive-nya sendiri.
+    val simpanKeDrive = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) viewModel.simpanBackupKeUri(context, uri)
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("Backup & Restore Data", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(4.dp))
@@ -43,6 +53,18 @@ fun BackupScreen(viewModel: BackupViewModel = hiltViewModel()) {
                 onClick = { FileShareHelper.bagikanFile(context, file, "application/json") },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Bagikan File Backup") }
+
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { simpanKeDrive.launch(file.name) },
+                enabled = !state.sedangProses,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Simpan ke Google Drive") }
+            Text(
+                "Pilih akun & folder Google Drive toko Anda di jendela yang muncul, lalu backup " +
+                "akan tersimpan otomatis di sana sebagai cadangan online.",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
 
         Spacer(Modifier.height(24.dp))
