@@ -444,24 +444,35 @@ private fun PembayaranTunaiInput(
         }
         Spacer(Modifier.height(8.dp))
 
-        // Pilihan cepat pecahan uang umum.
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-            PECAHAN_UANG_UMUM.forEach { nominal ->
-                FilterChip(
-                    selected = !modeManual && uangDiterima == nominal,
-                    onClick = {
-                        modeManual = false
-                        onUangDiterimaTextChange(nominal.toLong().toString())
-                    },
-                    label = {
-                        Text(
-                            CurrencyFormatter.format(nominal),
-                            maxLines = 1,
-                            style = MaterialTheme.typography.labelMedium
+        // Pilihan cepat pecahan uang umum, disusun grid 2x2 supaya tiap kotak
+        // cukup lebar dan nominalnya tidak terpotong (sebelumnya 1 baris isi 4).
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            PECAHAN_UANG_UMUM.chunked(2).forEach { baris ->
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    baris.forEach { nominal ->
+                        FilterChip(
+                            selected = !modeManual && uangDiterima == nominal,
+                            onClick = {
+                                modeManual = false
+                                onUangDiterimaTextChange(nominal.toLong().toString())
+                            },
+                            label = {
+                                Text(
+                                    CurrencyFormatter.format(nominal),
+                                    maxLines = 1,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            },
+                            modifier = Modifier.weight(1f)
                         )
-                    },
-                    modifier = Modifier.weight(1f)
-                )
+                    }
+                    // Kalau jumlah pecahan ganjil, isi slot kosong biar kotak terakhir tidak melebar sendiri.
+                    if (baris.size < 2) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
             }
         }
         Spacer(Modifier.height(4.dp))
