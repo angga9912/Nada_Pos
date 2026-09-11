@@ -1,8 +1,33 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
+}
+
+// === SECRET lisensi (poin perbaikan #1 - sebelumnya tidak sinkron dengan tools/generate_license.py) ===
+// Dibaca dari SATU file "license.secret" di root project (di-gitignore, tidak pernah dicommit).
+// tools/generate_license.py membaca file yang SAMA PERSIS, jadi keduanya tidak bisa lagi tidak-sinkron.
+// Kalau file tidak ada (mis. clone baru belum setup), fallback ke nilai dev-only yang JELAS tidak aman
+// untuk produksi - supaya build tetap jalan untuk development sehari-hari tanpa menghalangi siapapun.
+val licenseSecretFile = rootProject.file("license.secret")
+val licenseSecret: String = if (licenseSecretFile.exists()) {
+    licenseSecretFile.readText().trim()
+} else {
+    logger.warn("PERINGATAN: license.secret tidak ditemukan - memakai secret dev-only yang TIDAK AMAN untuk produksi. Lihat license.secret.example.")
+    "DEV-ONLY-TIDAK-AMAN-UNTUK-PRODUKSI-SELALU-BUAT-license.secret-SEBELUM-RILIS"
+}
+
+// === Signing config untuk release build (poin perbaikan #2 - sebelumnya release tidak ditandatangani) ===
+// Dibaca dari "keystore.properties" di root project (di-gitignore, tidak pernah dicommit).
+// Lihat keystore.properties.example + tools/generate_keystore.sh untuk cara membuat keystore-nya.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreTersedia = keystorePropertiesFile.exists()
+val keystoreProperties = Properties().apply {
+    if (keystoreTersedia) load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
@@ -15,6 +40,8 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0-phase1"
+
+        buildConfigField("String", "LICENSE_SECRET", "\"$licenseSecret\"")
     }
 
     // Product flavors = titik kustomisasi per pelanggan (poin 21).
@@ -35,14 +62,40 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true // wajib di AGP 8+ untuk bisa pakai buildConfigField di atas
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
     }
 
+    signingConfigs {
+        if (keystoreTersedia) {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Minifikasi/obfuscation (R8) SENGAJA belum diaktifkan: beberapa dependency di project ini
+            // (Apache POI, ML Kit, Room, Hilt) pakai reflection dan butuh proguard-rules.pro yang teruji
+            // dengan build fisik sebelum aman diaktifkan - risiko silent-break (mis. Import/Export Excel
+            // tiba-tiba gagal) kalau dinyalakan tanpa pengujian di perangkat asli. Aktifkan setelah
+            // proguard-rules.pro divalidasi dengan build & test manual penuh (lihat komentar di file itu).
             isMinifyEnabled = false
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = if (keystoreTersedia) {
+                signingConfigs.getByName("release")
+            } else {
+                // Belum ada keystore.properties -> tetap bisa build & test lokal (pakai signing debug
+                // bawaan), TAPI APK hasilnya TIDAK BOLEH didistribusikan ke pelanggan/Play Store.
+                logger.warn("PERINGATAN: keystore.properties tidak ditemukan - release APK memakai signing DEBUG (hanya untuk testing lokal, jangan didistribusikan).")
+                signingConfigs.getByName("debug")
+            }
         }
     }
     compileOptions {
