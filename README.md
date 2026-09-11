@@ -30,18 +30,50 @@ yang sama dipakai Qasir/Pawoon/Kasir Pintar).
   kode dipalsukan/diubah ditolak, format salah ditolak, BASIC tidak butuh kode.
 
 ### PENTING sebelum rilis ke publik
-1. **Ganti `SECRET`** di dua tempat (harus identik persis):
-   - `app/src/main/java/com/nada/kasir/core/lisensi/LicenseKeyValidator.kt`
-   - `tools/generate_license.py`
-   Jangan pakai nilai default `"GANTI_DENGAN_SECRET_RAHASIA_ANDA_SEBELUM_RILIS"`.
-2. Kalau repo GitHub Anda **publik**, jangan commit SECRET asli - siapa saja
-   yang lihat kode sumbernya bisa generate lisensi sendiri secara gratis.
-   Kalau repo private, ini bukan masalah besar untuk skala bisnis kecil-menengah.
-3. Batasan yang perlu dipahami: validasi ini berjalan sepenuhnya di dalam APK
-   (offline), sehingga secara teori bisa di-reverse-engineer oleh orang yang
-   sangat berniat. Untuk skala kecil-menengah ini trade-off yang wajar (banyak
-   software indie pakai pendekatan serupa); kalau nanti scale besar, pertimbangkan
-   validasi online ke server.
+
+**Update: SECRET sekarang otomatis sinkron (perbaikan poin 1).** Sebelumnya
+harus diganti manual di 2 tempat terpisah dan gampang jadi tidak sinkron
+(ini yang sempat terjadi). Sekarang cukup 1 file:
+
+1. Copy `license.secret.example` jadi **`license.secret`** di root project,
+   isi dengan string acak rahasia (lihat instruksi di dalam file itu).
+   `app/build.gradle.kts` (untuk build APK) dan `tools/generate_license.py`
+   (untuk generate kode) SAMA-SAMA membaca file ini, jadi tidak bisa lagi
+   tidak-sinkron. File ini sudah otomatis di-`.gitignore` - tidak pernah ke-commit.
+2. Untuk build APK release lewat GitHub Actions, tambahkan isi `license.secret`
+   Anda sebagai GitHub Secret bernama `NADA_LICENSE_SECRET` (Settings > Secrets
+   and variables > Actions) - lihat komentar di `.github/workflows/android-build.yml`.
+3. Kalau repo GitHub Anda **publik**, pastikan `license.secret` memang tidak
+   ke-commit (cek dengan `git status` - harusnya tidak muncul). Kalau repo
+   private, ini bukan masalah besar untuk skala bisnis kecil-menengah.
+4. Batasan yang tetap perlu dipahami: validasi ini berjalan sepenuhnya di dalam
+   APK (offline), sehingga secara teori bisa di-reverse-engineer oleh orang yang
+   sangat berniat - lebih sulit sekarang karena APK release sudah ditandatangani
+   (lihat poin di bawah), tapi belum pakai code obfuscation (R8/ProGuard sengaja
+   belum diaktifkan, lihat komentar di `app/build.gradle.kts` dan
+   `app/proguard-rules.pro`). Untuk skala kecil-menengah ini trade-off yang wajar;
+   kalau nanti scale besar, pertimbangkan validasi online ke server.
+
+### Signing APK Release (perbaikan poin 2)
+
+Sebelumnya build `release` tidak ditandatangani sama sekali (tidak bisa
+dipublikasikan/diupdate secara resmi). Sekarang sudah ada signing config:
+
+1. Jalankan `./tools/generate_keystore.sh` **di komputer Anda sendiri** (bukan
+   di CI/cloud) untuk membuat keystore. **Backup file `.keystore` hasilnya ke
+   tempat aman** - kalau hilang, Anda tidak bisa lagi merilis update untuk APK
+   yang sudah terlanjur didistribusikan dengan keystore itu.
+2. Copy `keystore.properties.example` jadi `keystore.properties`, isi sesuai
+   keystore yang baru dibuat. File ini juga otomatis di-`.gitignore`.
+3. Build APK release yang sudah ditandatangani: `./gradlew assembleDemoRelease`
+   (hasil di `app/build/outputs/apk/demo/release/`).
+4. Untuk build otomatis lewat GitHub Actions, isi GitHub Secrets
+   `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` (lihat
+   komentar job `build-release` di `.github/workflows/android-build.yml`) -
+   job ini otomatis aktif begitu secret-secret itu terisi.
+5. Kalau `keystore.properties` belum ada, `assembleDemoRelease` tetap bisa
+   jalan (pakai signing debug bawaan) supaya tidak menghalangi testing lokal -
+   tapi APK hasilnya **tidak boleh didistribusikan ke pelanggan**.
 
 ### Cara pakai sehari-hari
 ```bash
@@ -240,6 +272,14 @@ Sudah ditambahkan di atas Phase 1 & 2:
   DB transaction. Pesan error tetap berbahasa manusia ("File Excel tidak sesuai format.")
 - ✅ **Backup Data** — `BackupManager` mengekspor seluruh data penting (Produk, Stok,
   Transaksi, Pengaturan Toko, Pengguna, Printer) ke satu file `.json`, bisa dibagikan.
+- ✅ **Simpan Backup ke Google Drive** — tombol "Simpan ke Google Drive" di layar
+  Backup & Restore membuka file picker sistem Android (Storage Access Framework);
+  Google Drive otomatis muncul sebagai salah satu lokasi kalau aplikasi Drive
+  terpasang & pemilik toko sudah login ke akunnya sendiri di HP tersebut. Pemilihan
+  akun & folder sepenuhnya di tangan pengguna - aplikasi ini TIDAK meminta akses
+  login Google apa pun dan tidak butuh Google Drive API/OAuth credentials
+  (pendekatan ini sengaja dipilih supaya tidak perlu setup Google Cloud Console
+  yang rumit hanya untuk fitur backup opsional).
 - ✅ **Restore Data** — validasi & parsing PENUH dilakukan dulu sebelum data lama
   disentuh sama sekali; penghapusan + penyisipan data baru dibungkus SATU
   `appDatabase.withTransaction{}` sehingga kalau ada error di tengah proses,
