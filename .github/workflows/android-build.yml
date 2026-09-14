@@ -22,6 +22,16 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # license.secret di-gitignore (tidak pernah di-commit), jadi CI perlu menuliskannya
+      # sendiri dari GitHub Secrets supaya APK yang dibuild di sini memakai SECRET produksi
+      # yang SAMA dengan yang dipakai tools/generate_license.py di komputer Anda.
+      # Kalau secret NADA_LICENSE_SECRET belum diisi di Settings > Secrets repo GitHub,
+      # langkah ini dilewati dan build tetap jalan memakai secret dev-only bawaan
+      # (aman untuk testing, tapi kode lisensi asli tidak akan valid di APK debug ini).
+      - name: Setup license.secret dari GitHub Secrets
+        if: ${{ secrets.NADA_LICENSE_SECRET != '' }}
+        run: echo "${{ secrets.NADA_LICENSE_SECRET }}" > license.secret
+
       - name: Beri izin eksekusi gradlew
         run: chmod +x gradlew
 
@@ -44,3 +54,53 @@ jobs:
         with:
           name: unit-test-report
           path: app/build/reports/tests/
+
+  # Job terpisah untuk build APK RELEASE yang sudah ditandatangani (poin perbaikan #2) -
+  # OTOMATIS DILEWATI kalau secret keystore belum di-setup, supaya tidak mengganggu job
+  # "build" di atas yang selalu jalan untuk testing sehari-hari.
+  #
+  # Cara mengaktifkan job ini:
+  # 1. Generate keystore lewat tools/generate_keystore.sh di komputer Anda.
+  # 2. Encode ke base64: base64 -i release.keystore | tr -d '\n' > keystore_base64.txt
+  # 3. Di GitHub: Settings > Secrets and variables > Actions, tambahkan:
+  #    KEYSTORE_BASE64 (isi dari keystore_base64.txt), KEYSTORE_PASSWORD, KEY_ALIAS,
+  #    KEY_PASSWORD, dan NADA_LICENSE_SECRET (isi file license.secret Anda).
+  build-release:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+
+    steps:
+      - name: Checkout kode
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup license.secret dari GitHub Secrets
+        run: echo "${{ secrets.NADA_LICENSE_SECRET }}" > license.secret
+
+      - name: Setup keystore dari GitHub Secrets
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.keystore
+          cat > keystore.properties <<EOF
+          storeFile=release.keystore
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          EOF
+
+      - name: Beri izin eksekusi gradlew
+        run: chmod +x gradlew
+
+      - name: Build APK Release yang sudah ditandatangani (flavor demo)
+        run: ./gradlew assembleDemoRelease --no-daemon
+
+      - name: Upload APK Release sebagai artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nada-pos-demo-release-signed
+          path: app/build/outputs/apk/demo/release/*.apk
+          if-no-files-found: error
