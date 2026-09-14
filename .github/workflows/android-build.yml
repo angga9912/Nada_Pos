@@ -22,15 +22,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # license.secret di-gitignore (tidak pernah di-commit), jadi CI perlu menuliskannya
-      # sendiri dari GitHub Secrets supaya APK yang dibuild di sini memakai SECRET produksi
-      # yang SAMA dengan yang dipakai tools/generate_license.py di komputer Anda.
-      # Kalau secret NADA_LICENSE_SECRET belum diisi di Settings > Secrets repo GitHub,
-      # langkah ini dilewati dan build tetap jalan memakai secret dev-only bawaan
-      # (aman untuk testing, tapi kode lisensi asli tidak akan valid di APK debug ini).
+      # CATATAN TEKNIS: "secrets" tidak boleh dipakai langsung di dalam "if:" -
+      # ini batasan resmi GitHub Actions (bukan bug kita). Solusinya: titipkan dulu
+      # ke "env:" di step yang sama, baru dicek lewat "env." di "if:" step itu.
       - name: Setup license.secret dari GitHub Secrets
-        if: ${{ secrets.NADA_LICENSE_SECRET != '' }}
-        run: echo "${{ secrets.NADA_LICENSE_SECRET }}" > license.secret
+        if: ${{ env.NADA_LICENSE_SECRET != '' }}
+        env:
+          NADA_LICENSE_SECRET: ${{ secrets.NADA_LICENSE_SECRET }}
+        run: echo "$NADA_LICENSE_SECRET" > license.secret
 
       - name: Beri izin eksekusi gradlew
         run: chmod +x gradlew
@@ -55,9 +54,28 @@ jobs:
           name: unit-test-report
           path: app/build/reports/tests/
 
-  # Job terpisah untuk build APK RELEASE yang sudah ditandatangani (poin perbaikan #2) -
-  # OTOMATIS DILEWATI kalau secret keystore belum di-setup, supaya tidak mengganggu job
-  # "build" di atas yang selalu jalan untuk testing sehari-hari.
+  # Job kecil khusus untuk MENGECEK apakah secret keystore sudah di-setup, hasilnya
+  # dititipkan lewat "outputs" job supaya bisa dibaca di "if:" job build-release di bawah.
+  # Ini akal-akalan resmi yang direkomendasikan GitHub sendiri, karena "secrets" ATAU "env"
+  # sama-sama TIDAK BISA dipakai langsung di "if:" level JOB (beda dengan level step).
+  check-secrets:
+    runs-on: ubuntu-latest
+    outputs:
+      has_keystore: ${{ steps.cek.outputs.has_keystore }}
+    steps:
+      - id: cek
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "has_keystore=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_keystore=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Job build APK RELEASE yang sudah ditandatangani (poin perbaikan #2) - OTOMATIS
+  # DILEWATI kalau secret keystore belum di-setup (lihat check-secrets di atas), supaya
+  # tidak mengganggu job "build" di atas yang selalu jalan untuk testing sehari-hari.
   #
   # Cara mengaktifkan job ini:
   # 1. Generate keystore lewat tools/generate_keystore.sh di komputer Anda.
@@ -66,8 +84,9 @@ jobs:
   #    KEYSTORE_BASE64 (isi dari keystore_base64.txt), KEYSTORE_PASSWORD, KEY_ALIAS,
   #    KEY_PASSWORD, dan NADA_LICENSE_SECRET (isi file license.secret Anda).
   build-release:
+    needs: check-secrets
     runs-on: ubuntu-latest
-    if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+    if: needs.check-secrets.outputs.has_keystore == 'true'
 
     steps:
       - name: Checkout kode
@@ -80,16 +99,23 @@ jobs:
           java-version: '17'
 
       - name: Setup license.secret dari GitHub Secrets
-        run: echo "${{ secrets.NADA_LICENSE_SECRET }}" > license.secret
+        env:
+          NADA_LICENSE_SECRET: ${{ secrets.NADA_LICENSE_SECRET }}
+        run: echo "$NADA_LICENSE_SECRET" > license.secret
 
       - name: Setup keystore dari GitHub Secrets
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.keystore
+          echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
           cat > keystore.properties <<EOF
           storeFile=release.keystore
-          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
-          keyAlias=${{ secrets.KEY_ALIAS }}
-          keyPassword=${{ secrets.KEY_PASSWORD }}
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
           EOF
 
       - name: Beri izin eksekusi gradlew
