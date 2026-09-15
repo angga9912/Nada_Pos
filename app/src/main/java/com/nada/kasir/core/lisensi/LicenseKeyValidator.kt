@@ -1,5 +1,6 @@
 package com.nada.kasir.core.lisensi
 
+import com.nada.kasir.BuildConfig
 import com.nada.kasir.core.paket.PaketAplikasi
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -33,10 +34,12 @@ data class HasilValidasiLisensi(
  */
 object LicenseKeyValidator {
 
-    // PENTING: SECRET ini harus identik dengan yang dipakai tools/generate_license.py
-    // untuk membuat kode lisensi. Jangan pernah membagikan/commit nilai produksi asli
-    // ke repo publik - siapapun yang tahu SECRET ini bisa membuat kode lisensi palsu.
-    private const val SECRET = "NADA-KASIR-LICENSE-SECRET-2024-GANTI-SEBELUM-RILIS"
+    // SECRET sekarang disuntikkan saat build dari file "license.secret" di root project
+    // (lihat app/build.gradle.kts), dan tools/generate_license.py membaca file YANG SAMA
+    // PERSIS - jadi keduanya tidak bisa lagi tidak-sinkron seperti sebelumnya.
+    // Jangan pernah membagikan/commit isi asli "license.secret" ke repo publik -
+    // siapapun yang tahu SECRET ini bisa membuat kode lisensi palsu.
+    private val SECRET = BuildConfig.LICENSE_SECRET
 
     private const val PREFIX = "NADA"
     private const val EXPIRY_LIFETIME = "LIFETIME"
