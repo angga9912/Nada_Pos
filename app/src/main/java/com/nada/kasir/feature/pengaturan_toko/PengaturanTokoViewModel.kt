@@ -51,11 +51,20 @@ class PengaturanTokoViewModel @Inject constructor(
         }
     }
 
-    /** Aktivasi kode lisensi Custom/Pro (model bisnis freemium). */
-    fun aktivasiLisensi(kode: String) {
+    /** Aktivasi kode lisensi Custom/Pro (model bisnis freemium).
+     *  [onBerhasil] hanya dipanggil kalau aktivasi SUKSES - dipakai UI untuk
+     *  mengosongkan kotak kode HANYA setelah berhasil, supaya kalau gagal,
+     *  pengguna masih bisa lihat kode apa yang tadi mereka ketik/tempel dan
+     *  mengoreksinya (sebelumnya kotak selalu dikosongkan meski gagal, jadi
+     *  kelihatan seperti "kode berubah sendiri" padahal cuma placeholder muncul
+     *  lagi karena kotaknya kosong). */
+    fun aktivasiLisensi(kode: String, onBerhasil: () -> Unit = {}) {
         viewModelScope.launch {
             when (val hasil = licenseRepository.aktivasi(kode)) {
-                is Result.Success -> _pesanAktivasi.value = "Aktivasi berhasil! Paket ${hasil.data.label} sekarang aktif."
+                is Result.Success -> {
+                    _pesanAktivasi.value = "Aktivasi berhasil! Paket ${hasil.data.label} sekarang aktif."
+                    onBerhasil()
+                }
                 is Result.Failure -> _pesanAktivasi.value = hasil.error.pesan
             }
         }

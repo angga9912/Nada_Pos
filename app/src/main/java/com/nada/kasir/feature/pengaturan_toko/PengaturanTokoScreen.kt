@@ -120,7 +120,7 @@ fun PengaturanTokoScreen(viewModel: PengaturanTokoViewModel = hiltViewModel()) {
         )
         Spacer(Modifier.height(8.dp))
         Button(
-            onClick = { viewModel.aktivasiLisensi(kodeAktivasi); kodeAktivasi = "" },
+            onClick = { viewModel.aktivasiLisensi(kodeAktivasi) { kodeAktivasi = "" } },
             enabled = kodeAktivasi.isNotBlank(),
             modifier = Modifier.fillMaxWidth()
         ) { Text("Aktivasi") }
