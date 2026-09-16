@@ -1,0 +1,70 @@
+name: Generate Kode Lisensi
+
+# Dipicu MANUAL lewat tab Actions - isi form kecil (tier, jenis masa berlaku) lalu Run workflow.
+# Hasilnya muncul di "Summary" run ini (halaman ringkasan yang rapi, bukan cuma di log mentah).
+on:
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: 'Tingkat paket'
+        required: true
+        type: choice
+        options:
+          - PRO
+          - CUSTOM
+      expiry_type:
+        description: 'Jenis masa berlaku'
+        required: true
+        type: choice
+        options:
+          - LIFETIME
+          - BULAN
+          - TANGGAL_SPESIFIK
+      bulan:
+        description: 'Jumlah bulan (isi HANYA kalau jenis = BULAN)'
+        required: false
+        default: '1'
+      tanggal:
+        description: 'Tanggal kadaluarsa format YYYYMMDD (isi HANYA kalau jenis = TANGGAL_SPESIFIK)'
+        required: false
+        default: ''
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout kode
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Setup license.secret dari GitHub Secrets
+        env:
+          NADA_LICENSE_SECRET: ${{ secrets.NADA_LICENSE_SECRET }}
+        run: echo "$NADA_LICENSE_SECRET" > license.secret
+
+      - name: Generate kode aktivasi
+        env:
+          TIER: ${{ inputs.tier }}
+          EXPIRY_TYPE: ${{ inputs.expiry_type }}
+          BULAN: ${{ inputs.bulan }}
+          TANGGAL: ${{ inputs.tanggal }}
+        run: |
+          if [ "$EXPIRY_TYPE" = "LIFETIME" ]; then
+            python3 tools/generate_license.py --tier "$TIER" --expiry LIFETIME > hasil.txt
+          elif [ "$EXPIRY_TYPE" = "BULAN" ]; then
+            python3 tools/generate_license.py --tier "$TIER" --bulan "$BULAN" > hasil.txt
+          else
+            python3 tools/generate_license.py --tier "$TIER" --expiry "$TANGGAL" > hasil.txt
+          fi
+          cat hasil.txt
+
+      - name: Tampilkan hasil di ringkasan run
+        run: |
+          echo "## Kode Aktivasi" >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          cat hasil.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
