@@ -2,6 +2,7 @@ package com.nada.kasir.feature.pengaturan_toko
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import com.nada.kasir.BuildConfig
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -218,6 +219,14 @@ fun PengaturanTokoScreen(viewModel: PengaturanTokoViewModel = hiltViewModel()) {
             },
             modifier = Modifier.fillMaxWidth().height(56.dp)
         ) { Text("Simpan Pengaturan") }
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "Versi Aplikasi ${BuildConfig.VERSION_NAME}",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
         Spacer(Modifier.height(24.dp))
     }
 
