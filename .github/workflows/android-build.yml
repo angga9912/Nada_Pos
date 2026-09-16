@@ -39,6 +39,19 @@ jobs:
 
       - name: Build APK Debug (flavor demo)
         run: ./gradlew assembleDemoDebug --no-daemon
+        
+      - name: Cek APK yang berhasil dibuild (debug)
+        run: find app/build/outputs/apk -name "*.apk" -print
+
+      - name: Rename APK jadi NadaPOS.apk
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/demo/debug -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "GAGAL: tidak ada file APK ditemukan di app/build/outputs/apk/demo/debug/"
+            exit 1
+          fi
+          echo "Ditemukan: $APK_PATH"
+          mv "$APK_PATH" app/build/outputs/apk/demo/debug/NadaPOS.apk
 
       - name: Upload APK sebagai artifact
         uses: actions/upload-artifact@v4
@@ -123,10 +136,16 @@ jobs:
 
       - name: Build APK Release yang sudah ditandatangani (flavor demo)
         run: ./gradlew assembleDemoRelease --no-daemon
-        
       - name: Rename APK jadi NadaPOS.apk
-        run: mv app/build/outputs/apk/demo/debug/*.apk app/build/outputs/apk/demo/debug/NadaPOS.apk
-        
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/demo/release -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "GAGAL: tidak ada file APK ditemukan di app/build/outputs/apk/demo/release/"
+            exit 1
+          fi
+          echo "Ditemukan: $APK_PATH"
+          mv "$APK_PATH" app/build/outputs/apk/demo/release/NadaPOS.apk 
+          
       - name: Upload APK Release sebagai artifact
         uses: actions/upload-artifact@v4
         with:
