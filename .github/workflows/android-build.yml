@@ -123,7 +123,10 @@ jobs:
 
       - name: Build APK Release yang sudah ditandatangani (flavor demo)
         run: ./gradlew assembleDemoRelease --no-daemon
-
+        
+      - name: Rename APK jadi NadaPOS.apk
+        run: mv app/build/outputs/apk/demo/debug/*.apk app/build/outputs/apk/demo/debug/NadaPOS.apk
+        
       - name: Upload APK Release sebagai artifact
         uses: actions/upload-artifact@v4
         with:
