@@ -106,13 +106,6 @@ android {
         jvmTarget = "17"
     }
 }
-   androidComponents {
-    onVariants(selector().all()) { variant: com.android.build.api.variant.ApplicationVariant ->
-        variant.outputs.forEach { output: com.android.build.api.variant.VariantOutput ->
-            output.outputFileName.set("NadaPOS.apk")
-        }
-    }
-}
 
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
