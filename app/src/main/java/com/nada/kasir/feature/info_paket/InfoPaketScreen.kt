@@ -43,6 +43,7 @@ private val daftarFitur = listOf(
  * Pengaturan. Menampilkan paket yang sedang aktif dan menyediakan tombol
  * langsung ke WhatsApp penjual untuk permintaan upgrade.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun InfoPaketScreen(
     onKembali: () -> Unit,
