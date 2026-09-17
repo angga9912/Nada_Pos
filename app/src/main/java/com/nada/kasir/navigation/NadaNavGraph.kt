@@ -11,12 +11,15 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.ui.platform.LocalContext
 import com.nada.kasir.core.session.SessionManager
 import com.nada.kasir.feature.backup.BackupScreen
 import com.nada.kasir.feature.dashboard.DashboardScreen
 import com.nada.kasir.feature.kasir.KasirScreen
 import com.nada.kasir.feature.laporan.LaporanScreen
 import com.nada.kasir.feature.login.LoginScreen
+import com.nada.kasir.feature.onboarding.OnboardingPreference
+import com.nada.kasir.feature.onboarding.OnboardingScreen
 import com.nada.kasir.feature.pengaturan_hub.PengaturanHubScreen
 import com.nada.kasir.feature.pengaturan_printer.PengaturanPrinterScreen
 import com.nada.kasir.feature.pengaturan_toko.PengaturanTokoScreen
@@ -25,6 +28,7 @@ import com.nada.kasir.feature.produk.ProdukScreen
 import com.nada.kasir.feature.riwayat.RiwayatScreen
 
 sealed class NadaRoute(val route: String) {
+    object Onboarding : NadaRoute("onboarding")
     object Login : NadaRoute("login")
     object MainShell : NadaRoute("main_shell") // berisi Home/Kasir/Produk/Riwayat/Pengaturan dengan bottom nav
     object PengaturanPrinter : NadaRoute("pengaturan_printer")
@@ -44,7 +48,23 @@ private enum class TabUtama(val label: String, val ikon: androidx.compose.ui.gra
 
 @Composable
 fun NadaNavGraph(navController: NavHostController = rememberNavController()) {
-    NavHost(navController = navController, startDestination = NadaRoute.Login.route) {
+    val context = LocalContext.current
+    // Onboarding cuma tampil SEKALI di pembukaan pertama - dicek dari SharedPreferences.
+    // remember (bukan dicek ulang tiap recomposition) supaya nggak "lompat" balik ke
+    // onboarding kalau layar lain memicu recomposition NavHost ini.
+    val startDestination = remember {
+        if (OnboardingPreference.sudahLihat(context)) NadaRoute.Login.route else NadaRoute.Onboarding.route
+    }
+
+    NavHost(navController = navController, startDestination = startDestination) {
+        composable(NadaRoute.Onboarding.route) {
+            OnboardingScreen(onSelesai = {
+                OnboardingPreference.tandaiSudahLihat(context)
+                navController.navigate(NadaRoute.Login.route) {
+                    popUpTo(NadaRoute.Onboarding.route) { inclusive = true }
+                }
+            })
+        }
         composable(NadaRoute.Login.route) {
             LoginScreen(onLoginBerhasil = {
                 navController.navigate(NadaRoute.MainShell.route) {
