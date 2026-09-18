@@ -1,6 +1,7 @@
 package com.nada.kasir.navigation
 
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -11,7 +12,11 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import com.nada.kasir.core.session.SessionManager
 import com.nada.kasir.feature.backup.BackupScreen
 import com.nada.kasir.feature.dashboard.DashboardScreen
@@ -110,14 +115,48 @@ private fun MainShell(navController: NavHostController, sessionManager: SessionM
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                TabUtama.values().forEach { tab ->
-                    NavigationBarItem(
-                        selected = tabAktif == tab,
-                        onClick = { tabAktif = tab },
-                        icon = { Icon(tab.ikon, contentDescription = tab.label) },
-                        label = { Text(tab.label) }
-                    )
+            // Bottom bar dengan tombol tengah melayang (floating) - meniru posisi tombol
+            // "scan" bulat pada referensi desain, tapi di sini dipakai untuk akses cepat
+            // ke tab Produk yang memang sudah berada di posisi tengah susunan tab.
+            Box {
+                NavigationBar {
+                    TabUtama.values().forEach { tab ->
+                        if (tab == TabUtama.PRODUK) {
+                            // Slot dikosongkan di bar rata - tombol asli untuk tab ini
+                            // ditampilkan sebagai FloatingActionButton bulat di atasnya.
+                            NavigationBarItem(
+                                selected = false,
+                                onClick = {},
+                                enabled = false,
+                                icon = {},
+                                label = {},
+                                colors = NavigationBarItemDefaults.colors(
+                                    unselectedIconColor = Color.Transparent,
+                                    indicatorColor = Color.Transparent
+                                )
+                            )
+                        } else {
+                            NavigationBarItem(
+                                selected = tabAktif == tab,
+                                onClick = { tabAktif = tab },
+                                icon = { Icon(tab.ikon, contentDescription = tab.label) },
+                                label = { Text(tab.label) }
+                            )
+                        }
+                    }
+                }
+                FloatingActionButton(
+                    onClick = { tabAktif = TabUtama.PRODUK },
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = (-26).dp)
+                        .size(56.dp),
+                    shape = CircleShape,
+                    containerColor = if (tabAktif == TabUtama.PRODUK) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = if (tabAktif == TabUtama.PRODUK) Color.White else MaterialTheme.colorScheme.onPrimaryContainer,
+                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
+                ) {
+                    Icon(TabUtama.PRODUK.ikon, contentDescription = TabUtama.PRODUK.label)
                 }
             }
         }
