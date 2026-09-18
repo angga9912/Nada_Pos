@@ -36,6 +36,7 @@ fun PengaturanHubScreen(
     onBukaPengaturanToko: () -> Unit,
     onBukaPengguna: () -> Unit,
     onBukaBackup: () -> Unit,
+    onBukaInfoPaket: () -> Unit,
     onLogout: () -> Unit,
     viewModel: PengaturanHubViewModel = androidx.hilt.navigation.compose.hiltViewModel()
 ) {
@@ -50,6 +51,7 @@ fun PengaturanHubScreen(
         if (paketAktif.mencakup(PaketAplikasi.CUSTOM)) {
             add(ItemPengaturan("Backup & Restore Data", "Cadangkan atau pulihkan seluruh data", Icons.Filled.CloudUpload, onBukaBackup))
         }
+        add(ItemPengaturan("Info Paket & Upgrade", "Bandingkan Basic, Custom, dan Pro", Icons.Filled.WorkspacePremium, onBukaInfoPaket))
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
