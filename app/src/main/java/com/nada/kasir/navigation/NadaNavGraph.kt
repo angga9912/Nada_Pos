@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.nada.kasir.core.session.SessionManager
 import com.nada.kasir.feature.backup.BackupScreen
 import com.nada.kasir.feature.dashboard.DashboardScreen
+import com.nada.kasir.feature.info_paket.InfoPaketScreen
 import com.nada.kasir.feature.kasir.KasirScreen
 import com.nada.kasir.feature.laporan.LaporanScreen
 import com.nada.kasir.feature.login.LoginScreen
@@ -36,6 +37,7 @@ sealed class NadaRoute(val route: String) {
     object Laporan : NadaRoute("laporan")
     object PengaturanToko : NadaRoute("pengaturan_toko")
     object Pengguna : NadaRoute("pengguna")
+    object InfoPaket : NadaRoute("info_paket")
 }
 
 private enum class TabUtama(val label: String, val ikon: androidx.compose.ui.graphics.vector.ImageVector) {
@@ -83,6 +85,7 @@ fun NadaNavGraph(navController: NavHostController = rememberNavController()) {
         composable(NadaRoute.Laporan.route) { LaporanScreen() }
         composable(NadaRoute.PengaturanToko.route) { PengaturanTokoScreen() }
         composable(NadaRoute.Pengguna.route) { PenggunaScreen() }
+        composable(NadaRoute.InfoPaket.route) { InfoPaketScreen(onKembali = { navController.popBackStack() }) }
     }
 }
 
@@ -143,6 +146,7 @@ private fun MainShell(navController: NavHostController, sessionManager: SessionM
                     onBukaPengaturanToko = { navController.navigate(NadaRoute.PengaturanToko.route) },
                     onBukaPengguna = { navController.navigate(NadaRoute.Pengguna.route) },
                     onBukaBackup = { navController.navigate(NadaRoute.Backup.route) },
+                    onBukaInfoPaket = { navController.navigate(NadaRoute.InfoPaket.route) },
                     onLogout = ::logout
                 )
             }
