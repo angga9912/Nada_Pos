@@ -153,4 +153,13 @@ class TransactionRepository @Inject constructor(
         val transaksi = transactionDao.getTransaksiTerbaru(limit)
         return transaksi.map { it to transactionDao.getItems(it.id) }
     }
+
+    // === Untuk header "wallet style" Dashboard versi Pro ===
+    fun observeTotalOmzetSemuaWaktu(): Flow<Double> = transactionDao.observeTotalOmzetSemuaWaktu()
+
+    fun observeTotalQtyTerjual(startMillis: Long, endMillis: Long): Flow<Int> =
+        transactionDao.observeTotalQtyTerjual(startMillis, endMillis)
+
+    suspend fun getProdukPopuler(start: Long, end: Long, limit: Int = 5) =
+        transactionDao.getProdukTerlaris(start, end, limit)
 }
