@@ -112,15 +112,28 @@ interface TransactionDao {
     suspend fun getJumlahTransaksiDalamRentang(start: Long, end: Long): Int
 
     @Query("""
-        SELECT ti.productId as productId, ti.namaProdukSnapshot as nama, SUM(ti.qty) as totalQty
+        SELECT ti.productId as productId, ti.namaProdukSnapshot as nama, SUM(ti.qty) as totalQty,
+               SUM(ti.subtotal) as totalOmzet, p.fotoPath as fotoPath
         FROM transaction_items ti
         INNER JOIN transactions t ON t.id = ti.transactionId
+        LEFT JOIN products p ON p.id = ti.productId
         WHERE t.status = 'COMPLETED' AND t.tanggalWaktu BETWEEN :start AND :end
         GROUP BY ti.productId
         ORDER BY totalQty DESC
         LIMIT :limit
     """)
     suspend fun getProdukTerlaris(start: Long, end: Long, limit: Int): List<ProdukTerlaris>
+
+    // === Untuk header "wallet style" Dashboard versi Pro (poin dashboard Pro) ===
+    @Query("SELECT COALESCE(SUM(total), 0) FROM transactions WHERE status = 'COMPLETED'")
+    fun observeTotalOmzetSemuaWaktu(): Flow<Double>
+
+    @Query("""
+        SELECT COALESCE(SUM(ti.qty), 0) FROM transaction_items ti
+        INNER JOIN transactions t ON t.id = ti.transactionId
+        WHERE t.status = 'COMPLETED' AND t.tanggalWaktu BETWEEN :start AND :end
+    """)
+    fun observeTotalQtyTerjual(start: Long, end: Long): Flow<Int>
 
 
     @Query("SELECT * FROM transactions WHERE status = 'COMPLETED' ORDER BY tanggalWaktu DESC LIMIT :limit")
@@ -134,4 +147,10 @@ interface TransactionDao {
 }
 
 data class RingkasanMetodePembayaran(val metode: String, val total: Double, val jumlahTransaksi: Int)
-data class ProdukTerlaris(val productId: Long, val nama: String, val totalQty: Int)
+data class ProdukTerlaris(
+    val productId: Long,
+    val nama: String,
+    val totalQty: Int,
+    val totalOmzet: Double = 0.0,
+    val fotoPath: String? = null
+)
