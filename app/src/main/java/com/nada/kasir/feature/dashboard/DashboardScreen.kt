@@ -54,21 +54,208 @@ fun DashboardScreen(
 
     LaunchedEffect(Unit) { viewModel.muatTransaksiTerbaru() }
 
+    // Dashboard gaya "wallet" hanya untuk paket PRO (poin permintaan: paket lain TIDAK berubah
+    // sama sekali, harus persis seperti tampilan sebelumnya).
+    val isPro = state.paketAktif == com.nada.kasir.core.paket.PaketAplikasi.PRO
+
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
         item { HeaderDashboard(namaToko = state.store?.nama ?: "NADA POS", logoPath = state.store?.logoPath, namaPengguna = namaPengguna, onLogout = onLogout) }
         item { Spacer(Modifier.height(4.dp)) }
-        item { RingkasanSection(state) }
+        if (isPro) {
+            item { WalletCardPro(state = state, onLihatLaporan = onBukaLaporan) }
+            item { Spacer(Modifier.height(16.dp)) }
+            item { StatsRowPro(state) }
+        } else {
+            item { RingkasanSection(state) }
+        }
         item { Spacer(Modifier.height(20.dp)) }
         item { PrimaryActionCard(onClick = onBukaKasir) }
         item { Spacer(Modifier.height(24.dp)) }
         item { MenuUtamaSection(isAdmin, state.paketAktif, onBukaProduk, onBukaRiwayat, onBukaLaporan) }
         item { Spacer(Modifier.height(24.dp)) }
         item { PerhatianStokSection(state.stokMenipis, state.stokHabis, onLihatProduk = onBukaProduk) }
+        if (isPro) {
+            item { Spacer(Modifier.height(24.dp)) }
+            item { ProdukPopulerSection(state, onLihatSemua = onBukaLaporan) }
+        }
         item { Spacer(Modifier.height(24.dp)) }
         item { TransaksiTerbaruSection(state, onLihatSemua = onBukaRiwayat, onMulaiTransaksi = onBukaKasir) }
+    }
+}
+
+/**
+ * Kartu saldo gaya "dompet" - HANYA ditampilkan untuk paket PRO. Paket Basic/Custom
+ * tetap memakai RingkasanSection lama, tidak tersentuh sama sekali oleh kartu ini.
+ * "Total Balance" = total omzet sepanjang waktu (bukan kas fisik), "+Rp X hari ini"
+ * = penjualan hari ini, supaya tidak menyesatkan pemilik toko soal saldo kas asli.
+ */
+@Composable
+private fun WalletCardPro(state: DashboardUiState, onLihatLaporan: () -> Unit) {
+    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.primary,
+            tonalElevation = 3.dp
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        state.store?.nama ?: "NADA POS",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold, color = Color.White),
+                        maxLines = 1, modifier = Modifier.weight(1f)
+                    )
+                    Surface(shape = RoundedCornerShape(8.dp), color = Color.White.copy(alpha = 0.18f)) {
+                        Text(
+                            "PRO", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = Color.White),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.height(18.dp))
+                Text("Total Omzet", style = MaterialTheme.typography.bodySmall.copy(color = Color.White.copy(alpha = 0.75f)))
+                Text(
+                    CurrencyFormatter.format(state.totalOmzetSemuaWaktu),
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold, color = Color.White),
+                    maxLines = 1
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "${CurrencyFormatter.format(state.penjualanHariIni)} hari ini",
+                        style = MaterialTheme.typography.bodySmall.copy(color = Color.White.copy(alpha = 0.85f))
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+                Surface(
+                    onClick = onLihatLaporan, shape = RoundedCornerShape(12.dp),
+                    color = Color.White.copy(alpha = 0.16f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.Assessment, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Lihat Laporan", style = MaterialTheme.typography.labelLarge.copy(color = Color.White, fontWeight = FontWeight.Medium))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Baris 3 statistik ("Sales today / Items sold / Low stock") - HANYA untuk PRO. */
+@Composable
+private fun StatsRowPro(state: DashboardUiState) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        KartuRingkasan(
+            modifier = Modifier.weight(1f), label = "Transaksi Hari Ini",
+            nilai = "${state.jumlahTransaksi}",
+            ikon = Icons.Filled.Receipt, warna = MaterialTheme.colorScheme.primary
+        )
+        KartuRingkasan(
+            modifier = Modifier.weight(1f), label = "Item Terjual",
+            nilai = "${state.itemTerjualHariIni}",
+            ikon = Icons.Filled.ShoppingBag, warna = MaterialTheme.colorScheme.primary
+        )
+        KartuRingkasan(
+            modifier = Modifier.weight(1f), label = "Stok Menipis",
+            nilai = "${state.stokMenipis}",
+            ikon = Icons.Filled.WarningAmber, warna = OranyeWarning
+        )
+    }
+}
+
+/** Daftar "Produk Populer" 7 hari terakhir dengan foto & progress bar - HANYA untuk PRO. */
+@Composable
+private fun ProdukPopulerSection(state: DashboardUiState, onLihatSemua: () -> Unit) {
+    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column {
+                Text("Produk Populer", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
+                Text("7 hari terakhir", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (state.produkPopuler.isNotEmpty()) {
+                TextButton(onClick = onLihatSemua) { Text("Lihat Semua →", style = MaterialTheme.typography.bodySmall) }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+
+        when {
+            state.sedangMemuatProdukPopuler -> {
+                Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                }
+            }
+            state.produkPopuler.isEmpty() -> {
+                Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface, tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Filled.TrendingUp, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(32.dp))
+                        Spacer(Modifier.height(8.dp))
+                        Text("Belum ada penjualan dalam 7 hari terakhir.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            else -> {
+                val maxQty = state.produkPopuler.maxOf { it.totalQty }.coerceAtLeast(1)
+                Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface, tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+                    Column {
+                        state.produkPopuler.forEachIndexed { idx, produk ->
+                            BarisProdukPopuler(peringkat = idx + 1, produk = produk, maxQty = maxQty)
+                            if (idx != state.produkPopuler.lastIndex) {
+                                Divider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BarisProdukPopuler(peringkat: Int, produk: com.nada.kasir.core.data.local.dao.ProdukTerlaris, maxQty: Int) {
+    Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (!produk.fotoPath.isNullOrBlank() && java.io.File(produk.fotoPath).exists()) {
+                coil.compose.AsyncImage(
+                    model = java.io.File(produk.fotoPath),
+                    contentDescription = produk.nama,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
+                )
+            } else {
+                Text("$peringkat", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary))
+            }
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(produk.nama, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), maxLines = 1, modifier = Modifier.weight(1f))
+                Spacer(Modifier.width(8.dp))
+                Text(CurrencyFormatter.format(produk.totalOmzet), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+            }
+            Spacer(Modifier.height(6.dp))
+            LinearProgressIndicator(
+                progress = { produk.totalQty.toFloat() / maxQty.toFloat() },
+                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+            )
+            Spacer(Modifier.height(2.dp))
+            Text("${produk.totalQty} terjual", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

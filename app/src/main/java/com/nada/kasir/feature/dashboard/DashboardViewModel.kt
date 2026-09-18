@@ -30,7 +30,12 @@ data class DashboardUiState(
     val store: StoreEntity? = null,
     val transaksiTerbaru: List<TransaksiTerbaruTampilan> = emptyList(),
     val sedangMemuatTransaksiTerbaru: Boolean = true,
-    val paketAktif: com.nada.kasir.core.paket.PaketAplikasi = com.nada.kasir.core.paket.PaketAplikasi.BASIC
+    val paketAktif: com.nada.kasir.core.paket.PaketAplikasi = com.nada.kasir.core.paket.PaketAplikasi.BASIC,
+    // Khusus header "wallet style" Dashboard versi Pro (poin dashboard Pro) - tidak dipakai Basic/Custom
+    val totalOmzetSemuaWaktu: Double = 0.0,
+    val itemTerjualHariIni: Int = 0,
+    val produkPopuler: List<com.nada.kasir.core.data.local.dao.ProdukTerlaris> = emptyList(),
+    val sedangMemuatProdukPopuler: Boolean = true
 )
 
 @HiltViewModel
@@ -47,8 +52,16 @@ class DashboardViewModel @Inject constructor(
     private val startMillis = cal.timeInMillis
     private val endMillis = startMillis + 24 * 60 * 60 * 1000L
 
+    // Rentang 7 hari terakhir (termasuk hari ini) - untuk "Produk Populer" header Pro
+    private val start7HariMillis = Calendar.getInstance().apply {
+        timeInMillis = startMillis
+        add(Calendar.DAY_OF_YEAR, -6)
+    }.timeInMillis
+
     private val transaksiTerbaruFlow = MutableStateFlow<List<TransaksiTerbaruTampilan>>(emptyList())
     private val sedangMemuatFlow = MutableStateFlow(true)
+    private val produkPopulerFlow = MutableStateFlow<List<com.nada.kasir.core.data.local.dao.ProdukTerlaris>>(emptyList())
+    private val sedangMemuatProdukPopulerFlow = MutableStateFlow(true)
 
     val uiState: StateFlow<DashboardUiState> = combine(
         transactionRepository.observeTotalPenjualanHariIni(startMillis, endMillis),
@@ -58,7 +71,11 @@ class DashboardViewModel @Inject constructor(
         storeRepository.observeStore(),
         transaksiTerbaruFlow,
         sedangMemuatFlow,
-        paketRepository.observePaketAktif()
+        paketRepository.observePaketAktif(),
+        transactionRepository.observeTotalOmzetSemuaWaktu(),
+        transactionRepository.observeTotalQtyTerjual(startMillis, endMillis),
+        produkPopulerFlow,
+        sedangMemuatProdukPopulerFlow
     ) { flows ->
         DashboardUiState(
             penjualanHariIni = flows[0] as Double,
@@ -68,7 +85,11 @@ class DashboardViewModel @Inject constructor(
             store = flows[4] as StoreEntity?,
             transaksiTerbaru = flows[5] as List<TransaksiTerbaruTampilan>,
             sedangMemuatTransaksiTerbaru = flows[6] as Boolean,
-            paketAktif = flows[7] as com.nada.kasir.core.paket.PaketAplikasi
+            paketAktif = flows[7] as com.nada.kasir.core.paket.PaketAplikasi,
+            totalOmzetSemuaWaktu = flows[8] as Double,
+            itemTerjualHariIni = flows[9] as Int,
+            produkPopuler = flows[10] as List<com.nada.kasir.core.data.local.dao.ProdukTerlaris>,
+            sedangMemuatProdukPopuler = flows[11] as Boolean
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardUiState())
 
@@ -76,7 +97,11 @@ class DashboardViewModel @Inject constructor(
         muatTransaksiTerbaru()
     }
 
-    /** Dipanggil ulang setiap Dashboard dibuka (mis. setelah kasir menyelesaikan transaksi baru). */
+    /**
+     * Dipanggil ulang setiap Dashboard dibuka (mis. setelah kasir menyelesaikan transaksi baru).
+     * Juga memuat ulang "Produk Populer" (dipakai header Pro) sekaligus, supaya pemanggil di
+     * Screen tidak perlu tahu ada dua sumber data terpisah.
+     */
     fun muatTransaksiTerbaru() {
         viewModelScope.launch {
             sedangMemuatFlow.value = true
@@ -92,6 +117,11 @@ class DashboardViewModel @Inject constructor(
             }
             transaksiTerbaruFlow.value = hasil
             sedangMemuatFlow.value = false
+        }
+        viewModelScope.launch {
+            sedangMemuatProdukPopulerFlow.value = true
+            produkPopulerFlow.value = transactionRepository.getProdukPopuler(start7HariMillis, endMillis, 5)
+            sedangMemuatProdukPopulerFlow.value = false
         }
     }
 }
