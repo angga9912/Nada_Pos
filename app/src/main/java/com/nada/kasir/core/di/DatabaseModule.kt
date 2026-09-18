@@ -21,9 +21,13 @@ object DatabaseModule {
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
         return Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.DB_NAME)
             .addMigrations(MIGRATION_2_3)
-            // fallbackToDestructiveMigration hanya untuk tahap development awal / lompatan versi
-            // yang belum ada migration eksplisitnya. Ganti dengan Migration eksplisit sebelum rilis.
-            .fallbackToDestructiveMigration()
+            // PENTING: setiap kali AppDatabase.version dinaikkan, WAJIB tambahkan Migration
+            // eksplisit baru (lihat Migrations.kt) dan daftarkan lewat addMigrations di atas.
+            // fallbackToDestructiveMigrationOnDowngrade() HANYA mengizinkan hapus-data saat versi
+            // TURUN (kasus langka: pembeli install APK lama di atas yang baru). Saat versi NAIK
+            // tanpa Migration terdaftar, Room akan CRASH dengan pesan jelas - ini disengaja, supaya
+            // bug migration ketahuan saat testing kamu sendiri, bukan diam-diam menghapus data pembeli.
+            .fallbackToDestructiveMigrationOnDowngrade()
             .build()
     }
 
