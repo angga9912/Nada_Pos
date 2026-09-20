@@ -15,8 +15,8 @@ yang sama dipakai Qasir/Pawoon/Kasir Pintar).
   siapa saja bisa tap "Pro" dan langsung dapat semua fitur gratis - jelas
   tidak bisa dipakai untuk aplikasi publik).
 - ✅ **Sistem Aktivasi Lisensi** (`LicenseKeyValidator` + `LicenseRepository`)
-  — validasi kode OFFLINE (tanpa server/internet) memakai HMAC-SHA256. Format:
-  `NADA-{TIER}-{EXPIRY}-{CHECKSUM}`, mendukung:
+  — validasi kode OFFLINE (tanpa server/internet) memakai **tanda tangan digital
+  ECDSA P-256**. Format: `NADA-{TIER}-{EXPIRY}-{TANDA-TANGAN}`, mendukung:
   - Langganan bulanan (expiry tanggal tertentu, auto-turun ke Basic kalau lewat)
   - Sekali bayar/lifetime (`LIFETIME`, tidak pernah expired)
 - ✅ **Pengecekan kadaluarsa otomatis** setiap aplikasi dibuka (`LoginViewModel`),
@@ -31,28 +31,33 @@ yang sama dipakai Qasir/Pawoon/Kasir Pintar).
 
 ### PENTING sebelum rilis ke publik
 
-**Update: SECRET sekarang otomatis sinkron (perbaikan poin 1).** Sebelumnya
-harus diganti manual di 2 tempat terpisah dan gampang jadi tidak sinkron
-(ini yang sempat terjadi). Sekarang cukup 1 file:
+**Lisensi memakai tanda tangan digital (ECDSA), bukan lagi secret bersama (HMAC).**
+Versi lama menanam SECRET di dalam APK - siapa pun yang membongkar APK bisa membuat kode
+lisensi sendiri. Sekarang APK hanya membawa **kunci publik** yang cuma bisa MEMERIKSA
+kode, tidak bisa MEMBUATNYA. Kunci privat (pembuat kode) hanya ada pada Anda.
 
-1. Copy `license.secret.example` jadi **`license.secret`** di root project,
-   isi dengan string acak rahasia (lihat instruksi di dalam file itu).
-   `app/build.gradle.kts` (untuk build APK) dan `tools/generate_license.py`
-   (untuk generate kode) SAMA-SAMA membaca file ini, jadi tidak bisa lagi
-   tidak-sinkron. File ini sudah otomatis di-`.gitignore` - tidak pernah ke-commit.
-2. Untuk build APK release lewat GitHub Actions, tambahkan isi `license.secret`
-   Anda sebagai GitHub Secret bernama `NADA_LICENSE_SECRET` (Settings > Secrets
-   and variables > Actions) - lihat komentar di `.github/workflows/android-build.yml`.
-3. Kalau repo GitHub Anda **publik**, pastikan `license.secret` memang tidak
-   ke-commit (cek dengan `git status` - harusnya tidak muncul). Kalau repo
-   private, ini bukan masalah besar untuk skala bisnis kecil-menengah.
-4. Batasan yang tetap perlu dipahami: validasi ini berjalan sepenuhnya di dalam
-   APK (offline), sehingga secara teori bisa di-reverse-engineer oleh orang yang
-   sangat berniat - lebih sulit sekarang karena APK release sudah ditandatangani
-   (lihat poin di bawah), tapi belum pakai code obfuscation (R8/ProGuard sengaja
-   belum diaktifkan, lihat komentar di `app/build.gradle.kts` dan
-   `app/proguard-rules.pro`). Untuk skala kecil-menengah ini trade-off yang wajar;
-   kalau nanti scale besar, pertimbangkan validasi online ke server.
+Setup sekali saja:
+
+1. Jalankan `python3 tools/generate_license.py --init` (di Termux/komputer Anda; butuh
+   Python 3.8+, tanpa library tambahan). Ini membuat `license.private` (**RAHASIA**) dan
+   `license.public`.
+2. Upload `license.public` ke root repo GitHub. Build APK membacanya otomatis
+   (`BuildConfig.LICENSE_PUBLIC_KEY`); build release dihentikan kalau file ini tidak ada.
+3. Salin isi `license.private` (64 karakter) ke GitHub Secret **`NADA_LICENSE_PRIVATE_KEY`**
+   (dipakai workflow "Generate Kode Lisensi") dan simpan cadangan offline (mis. password
+   manager). **Jangan pernah upload `license.private` ke GitHub.** Kalau hilang, Anda tidak
+   bisa membuat kode baru untuk APK yang sudah beredar.
+4. Build ulang APK. Kode dari generator versi lama (HMAC) **tidak berlaku lagi** - buatkan
+   ulang untuk pelanggan yang sudah punya kode.
+5. Secret lama `NADA_LICENSE_SECRET` dan file `license.secret.example` sudah tidak dipakai
+   dan boleh dihapus.
+
+Cek sebuah kode kapan saja: `python3 tools/generate_license.py --cek NADA-PRO-...`
+
+Batasan yang tetap perlu dipahami: validasi berjalan offline di dalam APK, jadi orang yang
+sangat berniat masih bisa mem-patch APK agar selalu menganggap lisensi valid (bukan
+membuat kode palsu). Obfuscation R8 (aktif di build release) mempersulit hal itu; untuk
+perlindungan penuh di skala besar, pertimbangkan validasi online ke server.
 
 ### Signing APK Release (perbaikan poin 2)
 
@@ -65,13 +70,13 @@ dipublikasikan/diupdate secara resmi). Sekarang sudah ada signing config:
    yang sudah terlanjur didistribusikan dengan keystore itu.
 2. Copy `keystore.properties.example` jadi `keystore.properties`, isi sesuai
    keystore yang baru dibuat. File ini juga otomatis di-`.gitignore`.
-3. Build APK release yang sudah ditandatangani: `./gradlew assembleDemoRelease`
-   (hasil di `app/build/outputs/apk/demo/release/`).
+3. Build APK release yang sudah ditandatangani: `./gradlew assembleFullRelease`
+   (hasil di `app/build/outputs/apk/full/release/`; versi coba: `assembleDemoRelease`).
 4. Untuk build otomatis lewat GitHub Actions, isi GitHub Secrets
    `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` (lihat
    komentar job `build-release` di `.github/workflows/android-build.yml`) -
    job ini otomatis aktif begitu secret-secret itu terisi.
-5. Kalau `keystore.properties` belum ada, `assembleDemoRelease` tetap bisa
+5. Kalau `keystore.properties` belum ada, `assembleFullRelease` tetap bisa
    jalan (pakai signing debug bawaan) supaya tidak menghalangi testing lokal -
    tapi APK hasilnya **tidak boleh didistribusikan ke pelanggan**.
 
