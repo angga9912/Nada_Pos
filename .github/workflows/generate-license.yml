@@ -41,13 +41,10 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Setup license.secret dari GitHub Secrets
-        env:
-          NADA_LICENSE_SECRET: ${{ secrets.NADA_LICENSE_SECRET }}
-        run: echo "$NADA_LICENSE_SECRET" > license.secret
-
       - name: Generate kode aktivasi
         env:
+          # Kunci PRIVAT lisensi (isi file license.private, 64 karakter hex) dari GitHub Secrets.
+          NADA_LICENSE_PRIVATE_KEY: ${{ secrets.NADA_LICENSE_PRIVATE_KEY }}
           TIER: ${{ inputs.tier }}
           EXPIRY_TYPE: ${{ inputs.expiry_type }}
           BULAN: ${{ inputs.bulan }}
