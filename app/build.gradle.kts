@@ -8,17 +8,18 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
-// === SECRET lisensi (poin perbaikan #1 - sebelumnya tidak sinkron dengan tools/generate_license.py) ===
-// Dibaca dari SATU file "license.secret" di root project (di-gitignore, tidak pernah dicommit).
-// tools/generate_license.py membaca file yang SAMA PERSIS, jadi keduanya tidak bisa lagi tidak-sinkron.
-// Kalau file tidak ada (mis. clone baru belum setup), fallback ke nilai dev-only yang JELAS tidak aman
-// untuk produksi - supaya build tetap jalan untuk development sehari-hari tanpa menghalangi siapapun.
-val licenseSecretFile = rootProject.file("license.secret")
-val licenseSecret: String = if (licenseSecretFile.exists()) {
-    licenseSecretFile.readText().trim()
+// === Kunci PUBLIK lisensi ===
+// Lisensi memakai tanda tangan digital ECDSA (bukan lagi secret bersama/HMAC). APK hanya membawa
+// kunci PUBLIK (aman dilihat siapa pun, tidak bisa dipakai membuat kode). Kunci PRIVAT untuk membuat
+// kode aktivasi hanya ada pada Anda (license.private / GitHub Secret NADA_LICENSE_PRIVATE_KEY).
+// Buat pasangan kuncinya sekali saja: python3 tools/generate_license.py --init
+// lalu upload file "license.public" ke root repo (isinya kunci publik, aman dicommit).
+val licensePublicFile = rootProject.file("license.public")
+val licensePublicKey: String = if (licensePublicFile.exists()) {
+    licensePublicFile.readText().trim()
 } else {
-    logger.warn("PERINGATAN: license.secret tidak ditemukan - memakai secret dev-only yang TIDAK AMAN untuk produksi. Lihat license.secret.example.")
-    "DEV-ONLY-TIDAK-AMAN-UNTUK-PRODUKSI-SELALU-BUAT-license.secret-SEBELUM-RILIS"
+    logger.warn("PERINGATAN: license.public tidak ditemukan - APK ini TIDAK akan bisa mengaktifkan kode lisensi apapun. Jalankan: python3 tools/generate_license.py --init")
+    ""
 }
 
 // === Signing config untuk release build (poin perbaikan #2 - sebelumnya release tidak ditandatangani) ===
@@ -38,16 +39,25 @@ android {
         applicationId = "com.nada.kasir"
         minSdk = 26 // Android 8.0+. Dinaikkan dari 24 karena Apache POI (Excel) butuh MethodHandle.invoke (API 26+)
         targetSdk = 34
-        versionCode = 3
+        versionCode = 4
         versionName = "2.1.0"
 
-        buildConfigField("String", "LICENSE_SECRET", "\"$licenseSecret\"")
+        buildConfigField("String", "LICENSE_PUBLIC_KEY", "\"$licensePublicKey\"")
     }
 
     // Product flavors = titik kustomisasi per pelanggan (poin 21).
     // Tambahkan flavor baru untuk tiap pelanggan tanpa mengubah kode inti.
     flavorDimensions += "client"
     productFlavors {
+        // FULL = versi utama yang dijual/didistribusikan ke pelanggan (package com.nada.kasir).
+        // Fitur berbayar TIDAK dibedakan lewat flavor, tapi lewat kode aktivasi lisensi
+        // (BASIC gratis; PRO/CUSTOM terbuka setelah kode aktivasi dimasukkan).
+        create("full") {
+            dimension = "client"
+            resValue("string", "app_name", "NADA POS")
+        }
+        // DEMO = versi coba, package terpisah (com.nada.kasir.demo) sehingga bisa terpasang
+        // berdampingan dengan versi full di HP yang sama.
         create("demo") {
             dimension = "client"
             applicationIdSuffix = ".demo"
@@ -81,12 +91,13 @@ android {
 
     buildTypes {
         release {
-            // Minifikasi/obfuscation (R8) SENGAJA belum diaktifkan: beberapa dependency di project ini
-            // (Apache POI, ML Kit, Room, Hilt) pakai reflection dan butuh proguard-rules.pro yang teruji
-            // dengan build fisik sebelum aman diaktifkan - risiko silent-break (mis. Import/Export Excel
-            // tiba-tiba gagal) kalau dinyalakan tanpa pengujian di perangkat asli. Aktifkan setelah
-            // proguard-rules.pro divalidasi dengan build & test manual penuh (lihat komentar di file itu).
-            isMinifyEnabled = false
+            // R8 AKTIF: kode di-obfuscate (nama kelas/method/variabel diacak), dipangkas, dan
+            // resource yang tidak terpakai dibuang -> APK lebih kecil & jauh lebih sulit dibaca
+            // setelah didekompilasi. Aturan pengecualian ada di proguard-rules.pro.
+            // WAJIB tes APK release di HP fisik (Excel, scan barcode, printer, backup, lisensi)
+            // sebelum dibagikan ke pelanggan. Simpan mapping.txt tiap rilis (untuk baca crash log).
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = if (keystoreTersedia) {
                 signingConfigs.getByName("release")
