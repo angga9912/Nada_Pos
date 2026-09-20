@@ -22,15 +22,6 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # CATATAN TEKNIS: "secrets" tidak boleh dipakai langsung di dalam "if:" -
-      # ini batasan resmi GitHub Actions (bukan bug kita). Solusinya: titipkan dulu
-      # ke "env:" di step yang sama, baru dicek lewat "env." di "if:" step itu.
-      - name: Setup license.secret dari GitHub Secrets
-        if: ${{ env.NADA_LICENSE_SECRET != '' }}
-        env:
-          NADA_LICENSE_SECRET: ${{ secrets.NADA_LICENSE_SECRET }}
-        run: echo "$NADA_LICENSE_SECRET" > license.secret
-
       - name: Beri izin eksekusi gradlew
         run: chmod +x gradlew
 
@@ -95,7 +86,7 @@ jobs:
   # 2. Encode ke base64: base64 -i release.keystore | tr -d '\n' > keystore_base64.txt
   # 3. Di GitHub: Settings > Secrets and variables > Actions, tambahkan:
   #    KEYSTORE_BASE64 (isi dari keystore_base64.txt), KEYSTORE_PASSWORD, KEY_ALIAS,
-  #    KEY_PASSWORD, dan NADA_LICENSE_SECRET (isi file license.secret Anda).
+  #    dan KEY_PASSWORD. (Lisensi tidak butuh secret di build: cukup file license.public di repo.)
   build-release:
     needs: check-secrets
     runs-on: ubuntu-latest
@@ -111,10 +102,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup license.secret dari GitHub Secrets
-        env:
-          NADA_LICENSE_SECRET: ${{ secrets.NADA_LICENSE_SECRET }}
-        run: echo "$NADA_LICENSE_SECRET" > license.secret
+      # Lisensi memakai kunci PUBLIK di file license.public (ada di repo) - tanpa itu APK tidak
+      # bisa mengaktifkan kode apapun, jadi build dihentikan supaya tidak lolos tanpa disadari.
+      - name: Pastikan license.public ada
+        run: |
+          if [ ! -s license.public ]; then
+            echo "GAGAL: license.public tidak ada di root repo. Jalankan 'python3 tools/generate_license.py --init' lalu upload license.public."
+            exit 1
+          fi
 
       - name: Setup keystore dari GitHub Secrets
         env:
@@ -134,21 +129,44 @@ jobs:
       - name: Beri izin eksekusi gradlew
         run: chmod +x gradlew
 
-      - name: Build APK Release yang sudah ditandatangani (flavor demo)
-        run: ./gradlew assembleDemoRelease --no-daemon
+      # R8 (obfuscation) aktif di build release: proses ini lebih lama dari build debug.
+      - name: Build APK Release yang sudah ditandatangani (flavor full + demo)
+        run: ./gradlew assembleFullRelease assembleDemoRelease --no-daemon --stacktrace
+
       - name: Rename APK jadi NadaPOS.apk
         run: |
-          APK_PATH=$(find app/build/outputs/apk/demo/release -name "*.apk" | head -n 1)
-          if [ -z "$APK_PATH" ]; then
-            echo "GAGAL: tidak ada file APK ditemukan di app/build/outputs/apk/demo/release/"
-            exit 1
-          fi
-          echo "Ditemukan: $APK_PATH"
-          mv "$APK_PATH" app/build/outputs/apk/demo/release/NadaPOS.apk 
-          
-      - name: Upload APK Release sebagai artifact
+          for FLAVOR in full demo; do
+            DIR=app/build/outputs/apk/$FLAVOR/release
+            APK_PATH=$(find "$DIR" -name "*.apk" | head -n 1)
+            if [ -z "$APK_PATH" ]; then
+              echo "GAGAL: tidak ada file APK ditemukan di $DIR/"
+              exit 1
+            fi
+            echo "Ditemukan: $APK_PATH"
+            mv "$APK_PATH" "$DIR/NadaPOS.apk"
+          done
+
+      - name: Upload APK Release FULL sebagai artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nada-pos-full-release-signed
+          path: app/build/outputs/apk/full/release/NadaPOS.apk
+          if-no-files-found: error
+
+      - name: Upload APK Release DEMO sebagai artifact
         uses: actions/upload-artifact@v4
         with:
           name: nada-pos-demo-release-signed
-          path: app/build/outputs/apk/demo/release/*.apk
+          path: app/build/outputs/apk/demo/release/NadaPOS.apk
           if-no-files-found: error
+
+      # mapping.txt = "kunci" untuk membaca kembali nama asli dari crash log (SIMPAN tiap rilis,
+      # jangan dibagikan ke pelanggan). Kalau R8 gagal, di sini juga ada missing_rules.txt
+      # (daftar aturan yang kurang) - kirim file itu untuk diperbaiki.
+      - name: Upload mapping R8 & log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r8-mapping-dan-log
+          path: app/build/outputs/mapping/
+          if-no-files-found: warn
