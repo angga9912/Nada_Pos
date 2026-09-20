@@ -7,6 +7,11 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      build_demo:
+        description: 'Ikut build APK DEMO juga? (build jadi sekitar 2x lebih lama)'
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -21,6 +26,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+          cache: 'gradle'
 
       - name: Beri izin eksekusi gradlew
         run: chmod +x gradlew
@@ -101,6 +107,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+          cache: 'gradle'
 
       # Lisensi memakai kunci PUBLIK di file license.public (ada di repo) - tanpa itu APK tidak
       # bisa mengaktifkan kode apapun, jadi build dihentikan supaya tidak lolos tanpa disadari.
@@ -130,12 +137,28 @@ jobs:
         run: chmod +x gradlew
 
       # R8 (obfuscation) aktif di build release: proses ini lebih lama dari build debug.
-      - name: Build APK Release yang sudah ditandatangani (flavor full + demo)
-        run: ./gradlew assembleFullRelease assembleDemoRelease --no-daemon --stacktrace
+      # APK FULL selalu dibuild. APK DEMO hanya kalau dicentang saat "Run workflow" manual
+      # (build otomatis dari push tidak membuild demo, supaya lebih cepat).
+      - name: Build APK Release yang sudah ditandatangani
+        env:
+          BUILD_DEMO: ${{ inputs.build_demo }}
+        run: |
+          TASKS="assembleFullRelease"
+          if [ "$BUILD_DEMO" = "true" ]; then
+            TASKS="$TASKS assembleDemoRelease"
+          fi
+          echo "Menjalankan: $TASKS"
+          ./gradlew $TASKS --no-daemon --stacktrace
 
       - name: Rename APK jadi NadaPOS.apk
+        env:
+          BUILD_DEMO: ${{ inputs.build_demo }}
         run: |
-          for FLAVOR in full demo; do
+          FLAVORS="full"
+          if [ "$BUILD_DEMO" = "true" ]; then
+            FLAVORS="full demo"
+          fi
+          for FLAVOR in $FLAVORS; do
             DIR=app/build/outputs/apk/$FLAVOR/release
             APK_PATH=$(find "$DIR" -name "*.apk" | head -n 1)
             if [ -z "$APK_PATH" ]; then
@@ -154,6 +177,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload APK Release DEMO sebagai artifact
+        if: ${{ inputs.build_demo }}
         uses: actions/upload-artifact@v4
         with:
           name: nada-pos-demo-release-signed
