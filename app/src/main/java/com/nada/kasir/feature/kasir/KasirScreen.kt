@@ -18,9 +18,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.nada.kasir.core.data.local.entity.MetodePembayaran
+import com.nada.kasir.core.util.BeepPlayer
 import com.nada.kasir.core.util.CurrencyFormatter
 import com.nada.kasir.core.util.HandheldScannerDetector
 import com.nada.kasir.feature.kasir.barcode.BarcodeScannerScreen
+import com.nada.kasir.feature.produk.ProdukFormDialog
 import com.nada.kasir.feature.struk.StrukPreviewDialog
 
 /**
@@ -33,16 +35,19 @@ import com.nada.kasir.feature.struk.StrukPreviewDialog
 @Composable
 fun KasirScreen(
     currentUserId: Long,
+    isAdmin: Boolean = false,
     viewModel: KasirViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
     var showPembayaranDialog by remember { mutableStateOf(false) }
     var showBarcodeScanner by remember { mutableStateOf(false) }
     var showKeranjangSheet by remember { mutableStateOf(false) }
+    var tampilFormProdukBaru by remember { mutableStateOf(false) }
 
     // Buffer untuk membedakan ketikan scanner fisik (handheld) vs ketikan manual kasir (poin 5, Phase 2)
     val handheldDetector = remember {
         HandheldScannerDetector(onBarcodeTerdeteksi = { kode ->
+            BeepPlayer.beep()
             viewModel.tambahDariBarcode(kode)
             viewModel.onQueryChange("")
         })
@@ -51,6 +56,7 @@ fun KasirScreen(
     if (showBarcodeScanner) {
         BarcodeScannerScreen(
             onDetected = { kode ->
+                BeepPlayer.beep()
                 showBarcodeScanner = false
                 viewModel.tambahDariBarcode(kode)
             },
@@ -75,6 +81,45 @@ fun KasirScreen(
             )
         }
         return
+    }
+
+    // Barcode terbaca tapi belum ada di data produk -> tawarkan tambah produk baru
+    state.barcodeBelumTerdaftar?.let { kode ->
+        if (isAdmin && tampilFormProdukBaru) {
+            ProdukFormDialog(
+                initial = null,
+                initialBarcode = kode,
+                onDismiss = {
+                    tampilFormProdukBaru = false
+                    viewModel.tutupBarcodeBelumTerdaftar()
+                },
+                onSimpan = { produk ->
+                    tampilFormProdukBaru = false
+                    viewModel.simpanProdukBaru(produk)
+                }
+            )
+        } else if (isAdmin) {
+            AlertDialog(
+                onDismissRequest = { viewModel.tutupBarcodeBelumTerdaftar() },
+                title = { Text("Produk belum terdaftar") },
+                text = { Text("Barcode $kode belum ada di data produk. Tambahkan sebagai produk baru?") },
+                confirmButton = {
+                    TextButton(onClick = { tampilFormProdukBaru = true }) { Text("Tambah Produk Baru") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.tutupBarcodeBelumTerdaftar() }) { Text("Batal") }
+                }
+            )
+        } else {
+            AlertDialog(
+                onDismissRequest = { viewModel.tutupBarcodeBelumTerdaftar() },
+                title = { Text("Produk belum terdaftar") },
+                text = { Text("Barcode $kode belum ada di data produk. Minta admin untuk menambahkannya.") },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.tutupBarcodeBelumTerdaftar() }) { Text("OK") }
+                }
+            )
+        }
     }
 
     state.errorPesan?.let { pesan ->
