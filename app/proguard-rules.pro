@@ -109,10 +109,29 @@
 -dontwarn javax.script.**
 
 # ---------------------------------------------------------------------------
-# ML Kit Barcode, Hilt, org.json
-# (CameraX, Coil, Compose, Room, Hilt membawa aturan consumer sendiri)
+# Scan barcode: ML Kit + CameraX (kode native / refleksi -> nama kelas & field HARUS utuh)
+# Penyebab APK release menutup sendiri saat scan: kode native libbarhopper_v3.so memanggil
+# kelas Java "com.google.android.libraries.barhopper.*" lewat NAMA (JNI), ML Kit memuat
+# "Registrar"-nya lewat refleksi dari manifest, dan CameraX memuat Camera2Config lewat nama.
+# Kalau R8 mengacak nama-nama itu, aplikasi langsung crash begitu kamera scan dibuka.
 # ---------------------------------------------------------------------------
--keep class com.google.mlkit.vision.barcode.** { *; }
+-keep class com.google.android.libraries.barhopper.** { *; }
+-keep class com.google.mlkit.** { *; }
+-keep class com.google.android.gms.internal.mlkit_vision_barcode.** { *; }
+-keep class com.google.android.gms.internal.mlkit_vision_common.** { *; }
+-keep class com.google.android.gms.internal.mlkit_common.** { *; }
+-keep class com.google.firebase.components.** { *; }
+-keep class * implements com.google.firebase.components.ComponentRegistrar { *; }
+-keep class com.google.android.datatransport.** { *; }
+-keep class androidx.camera.** { *; }
+-keep class androidx.camera.camera2.Camera2Config$DefaultProvider { *; }
 -dontwarn com.google.mlkit.**
+-dontwarn com.google.android.datatransport.**
+-dontwarn androidx.camera.**
+
+# ---------------------------------------------------------------------------
+# Hilt, org.json
+# (Coil, Compose, Room, Hilt membawa aturan consumer sendiri)
+# ---------------------------------------------------------------------------
 -dontwarn dagger.hilt.**
 -dontwarn org.json.**
