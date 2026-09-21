@@ -121,13 +121,14 @@ fun ProdukScreen(isAdmin: Boolean = true, viewModel: ProdukViewModel = hiltViewM
 }
 
 @Composable
-private fun ProdukFormDialog(
+internal fun ProdukFormDialog(
     initial: ProductEntity?,
     onDismiss: () -> Unit,
-    onSimpan: (ProductEntity) -> Unit
+    onSimpan: (ProductEntity) -> Unit,
+    initialBarcode: String? = null // diisi dari hasil scan di layar Kasir
 ) {
     var kode by remember { mutableStateOf(initial?.kodeProduk ?: "") }
-    var barcode by remember { mutableStateOf(initial?.barcode ?: "") }
+    var barcode by remember { mutableStateOf(initial?.barcode ?: initialBarcode ?: "") }
     var nama by remember { mutableStateOf(initial?.nama ?: "") }
     var hargaBeli by remember { mutableStateOf(initial?.hargaBeli?.toString() ?: "") }
     var hargaJual by remember { mutableStateOf(initial?.hargaJual?.toString() ?: "") }
