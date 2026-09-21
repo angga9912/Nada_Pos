@@ -23,7 +23,7 @@ import kotlin.math.sin
  * Toast berisi volume media & perangkat keluaran suara. Setelah masalah selesai, ubah jadi false.
  */
 object BeepPlayer {
-    private const val TAMPILKAN_DIAGNOSA = true
+    private const val TAMPILKAN_DIAGNOSA = false
 
     private const val SAMPLE_RATE = 44100
     private const val FREKUENSI_HZ = 2600.0
