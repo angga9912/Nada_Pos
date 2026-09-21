@@ -26,6 +26,9 @@ import java.util.concurrent.Executors
  * Layar scan barcode pakai kamera HP (poin 5 & Phase 2).
  * Dipakai dari halaman Kasir sebagai dialog full-screen.
  * onDetected dipanggil sekali per sesi scan (auto-tutup setelah ketemu).
+ *
+ * Kegagalan membuka kamera/pemindai sekarang DITAMPILKAN sebagai pesan di layar (bukan
+ * diam-diam ditelan), supaya penyebabnya kelihatan kalau ada masalah di perangkat tertentu.
  */
 @Composable
 fun BarcodeScannerScreen(
@@ -39,6 +42,7 @@ fun BarcodeScannerScreen(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         )
     }
+    var pesanError by remember { mutableStateOf<String?>(null) }
     val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { granted -> hasCameraPermission = granted }
@@ -56,49 +60,60 @@ fun BarcodeScannerScreen(
                     val previewView = PreviewView(ctx)
                     val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                     val executor = Executors.newSingleThreadExecutor()
-                    val scanner = BarcodeScanning.getClient(
-                        BarcodeScannerOptions.Builder()
-                            .setBarcodeFormats(
-                                Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8,
-                                Barcode.FORMAT_CODE_128, Barcode.FORMAT_CODE_39,
-                                Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E, Barcode.FORMAT_QR_CODE
-                            ).build()
-                    )
+                    val scanner = try {
+                        BarcodeScanning.getClient(
+                            BarcodeScannerOptions.Builder()
+                                .setBarcodeFormats(
+                                    Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8,
+                                    Barcode.FORMAT_CODE_128, Barcode.FORMAT_CODE_39,
+                                    Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E, Barcode.FORMAT_QR_CODE
+                                ).build()
+                        )
+                    } catch (t: Throwable) {
+                        previewView.post { pesanError = "Pemindai barcode gagal dimulai (${t.javaClass.simpleName})." }
+                        return@AndroidView previewView
+                    }
 
                     cameraProviderFuture.addListener({
-                        val cameraProvider = cameraProviderFuture.get()
-                        val preview = Preview.Builder().build().also {
-                            it.setSurfaceProvider(previewView.surfaceProvider)
-                        }
-                        val analysis = ImageAnalysis.Builder()
-                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                            .build()
-
-                        analysis.setAnalyzer(executor) { imageProxy ->
-                            val mediaImage = imageProxy.image
-                            if (mediaImage != null && !sudahDeteksi) {
-                                val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-                                scanner.process(image)
-                                    .addOnSuccessListener { barcodes ->
-                                        val kode = barcodes.firstOrNull()?.rawValue
-                                        if (kode != null && !sudahDeteksi) {
-                                            sudahDeteksi = true
-                                            onDetected(kode)
-                                        }
-                                    }
-                                    .addOnCompleteListener { imageProxy.close() }
-                            } else {
-                                imageProxy.close()
-                            }
-                        }
-
                         try {
+                            val cameraProvider = cameraProviderFuture.get()
+                            val preview = Preview.Builder().build().also {
+                                it.setSurfaceProvider(previewView.surfaceProvider)
+                            }
+                            val analysis = ImageAnalysis.Builder()
+                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                .build()
+
+                            analysis.setAnalyzer(executor) { imageProxy ->
+                                val mediaImage = imageProxy.image
+                                if (mediaImage != null && !sudahDeteksi) {
+                                    val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+                                    scanner.process(image)
+                                        .addOnSuccessListener { barcodes ->
+                                            val kode = barcodes.firstOrNull()?.rawValue
+                                            if (kode != null && !sudahDeteksi) {
+                                                sudahDeteksi = true
+                                                onDetected(kode)
+                                            }
+                                        }
+                                        .addOnFailureListener { e ->
+                                            previewView.post {
+                                                if (pesanError == null) pesanError = "Pemindaian gagal (${e.javaClass.simpleName})."
+                                            }
+                                        }
+                                        .addOnCompleteListener { imageProxy.close() }
+                                } else {
+                                    imageProxy.close()
+                                }
+                            }
+
                             cameraProvider.unbindAll()
                             cameraProvider.bindToLifecycle(
                                 lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis
                             )
-                        } catch (e: Exception) {
-                            // Kamera gagal dibuka (mis. dipakai app lain) - biarkan pengguna kembali manual
+                        } catch (t: Throwable) {
+                            // Kamera gagal dibuka (mis. dipakai app lain) - tampilkan pesan, pengguna bisa kembali manual
+                            previewView.post { pesanError = "Kamera gagal dibuka (${t.javaClass.simpleName})." }
                         }
                     }, ContextCompat.getMainExecutor(ctx))
 
@@ -110,6 +125,13 @@ fun BarcodeScannerScreen(
                 modifier = Modifier.align(Alignment.TopCenter),
                 color = androidx.compose.ui.graphics.Color.White
             )
+            pesanError?.let { pesan ->
+                Text(
+                    pesan,
+                    modifier = Modifier.align(Alignment.Center),
+                    color = androidx.compose.ui.graphics.Color.Yellow
+                )
+            }
             TextButton(onClick = onClose, modifier = Modifier.align(Alignment.BottomCenter)) {
                 Text("Tutup", color = androidx.compose.ui.graphics.Color.White)
             }
