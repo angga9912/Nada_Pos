@@ -38,7 +38,7 @@ object CrashReporter {
                     append(Log.getStackTraceString(error))
                 }
                 File(appContext.filesDir, NAMA_FILE).writeText(laporan.take(MAKS_KARAKTER))
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
                 // Pencatat tidak boleh menyebabkan crash baru
             }
             penanganBawaan?.uncaughtException(thread, error)
