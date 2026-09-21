@@ -176,7 +176,7 @@ private fun MainShell(navController: NavHostController, sessionManager: SessionM
                     onBukaPengguna = { navController.navigate(NadaRoute.Pengguna.route) },
                     onLogout = ::logout
                 )
-                TabUtama.KASIR -> KasirScreen(currentUserId = currentUserId)
+                TabUtama.KASIR -> KasirScreen(currentUserId = currentUserId, isAdmin = isAdmin)
                 TabUtama.PRODUK -> ProdukScreen(isAdmin = isAdmin)
                 TabUtama.TRANSAKSI -> RiwayatScreen(isAdmin = isAdmin)
                 TabUtama.PENGATURAN -> PengaturanHubScreen(
