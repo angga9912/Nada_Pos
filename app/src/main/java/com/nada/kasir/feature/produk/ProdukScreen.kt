@@ -2,20 +2,32 @@ package com.nada.kasir.feature.produk
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 import com.nada.kasir.core.data.local.entity.ProductEntity
 import com.nada.kasir.core.util.CurrencyFormatter
 import com.nada.kasir.core.util.FileShareHelper
+import com.nada.kasir.core.util.ProductPhotoStorageHelper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Halaman DATA PRODUK (poin 6), dengan Import/Export Excel (poin 15, Phase 3). */
 @Composable
@@ -63,6 +75,7 @@ fun ProdukScreen(isAdmin: Boolean = true, viewModel: ProdukViewModel = hiltViewM
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(produkList) { produk ->
                     ListItem(
+                        leadingContent = { ThumbnailProduk(produk.fotoPath) },
                         headlineContent = { Text(produk.nama) },
                         supportingContent = {
                             Text("${produk.kodeProduk} • Stok: ${produk.stok} • ${CurrencyFormatter.format(produk.hargaJual)}")
@@ -134,12 +147,26 @@ internal fun ProdukFormDialog(
     var hargaJual by remember { mutableStateOf(initial?.hargaJual?.toString() ?: "") }
     var stok by remember { mutableStateOf(initial?.stok?.toString() ?: "0") }
     var stokMin by remember { mutableStateOf(initial?.stokMinimum?.toString() ?: "5") }
+    var fotoPath by remember { mutableStateOf(initial?.fotoPath) }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val pilihFoto = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val path = withContext(Dispatchers.IO) { ProductPhotoStorageHelper.simpanFotoDariUri(context, uri) }
+                if (path != null) fotoPath = path
+            }
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initial == null) "Tambah Produk" else "Edit Produk") },
         text = {
             Column {
+                FotoProdukPicker(fotoPath = fotoPath, onPilihFoto = { pilihFoto.launch("image/*") })
+                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(kode, { kode = it }, label = { Text("Kode Produk") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(barcode, { barcode = it }, label = { Text("Barcode") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(nama, { nama = it }, label = { Text("Nama Produk") }, modifier = Modifier.fillMaxWidth())
@@ -161,11 +188,83 @@ internal fun ProdukFormDialog(
                         hargaBeli = hargaBeli.toDoubleOrNull() ?: 0.0,
                         hargaJual = hargaJual.toDoubleOrNull() ?: 0.0,
                         stok = stok.toIntOrNull() ?: 0,
-                        stokMinimum = stokMin.toIntOrNull() ?: 5
+                        stokMinimum = stokMin.toIntOrNull() ?: 5,
+                        fotoPath = fotoPath
                     )
                 )
             }) { Text("Simpan") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
     )
+}
+
+/** Kotak persegi di form Produk untuk memilih/ganti foto dari galeri HP. */
+@Composable
+private fun FotoProdukPicker(fotoPath: String?, onPilihFoto: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(96.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .then(Modifier),
+        contentAlignment = Alignment.Center
+    ) {
+        if (!fotoPath.isNullOrBlank() && java.io.File(fotoPath).exists()) {
+            AsyncImage(
+                model = java.io.File(fotoPath),
+                contentDescription = "Foto produk",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Icon(
+                Icons.Filled.Inventory2,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.size(28.dp)
+            )
+        }
+        // Tombol kamera kecil di pojok, di atas foto - tap di mana saja pada kotak ini membuka galeri
+        Surface(
+            onClick = onPilihFoto,
+            color = MaterialTheme.colorScheme.primary,
+            shape = androidx.compose.foundation.shape.CircleShape,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp)
+        ) {
+            Icon(
+                Icons.Filled.AddAPhoto,
+                contentDescription = "Pilih foto produk",
+                tint = androidx.compose.ui.graphics.Color.White,
+                modifier = Modifier.padding(6.dp).size(16.dp)
+            )
+        }
+    }
+}
+
+/** Foto kecil bulat di daftar Produk; ikon netral kalau produk belum punya foto. */
+@Composable
+private fun ThumbnailProduk(fotoPath: String?) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center
+    ) {
+        if (!fotoPath.isNullOrBlank() && java.io.File(fotoPath).exists()) {
+            AsyncImage(
+                model = java.io.File(fotoPath),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Icon(
+                Icons.Filled.Inventory2,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
 }
