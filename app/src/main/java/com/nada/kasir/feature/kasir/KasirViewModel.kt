@@ -28,8 +28,7 @@ data class KasirUiState(
     val nomorAntrianBerhasil: Int? = null,
     val isProsesBayar: Boolean = false,
     val previewStruk: String? = null,
-    val sedangMencetak: Boolean = false,
-    val barcodeBelumTerdaftar: String? = null
+    val sedangMencetak: Boolean = false
 ) {
     val subtotal: Double get() = keranjang.sumOf { it.harga * it.qty }
     val total: Double get() = subtotal - diskonTotal
@@ -53,7 +52,6 @@ class KasirViewModel @Inject constructor(
     private val prosesBayarFlow = MutableStateFlow(false)
     private val previewStrukFlow = MutableStateFlow<String?>(null)
     private val sedangMencetakFlow = MutableStateFlow(false)
-    private val barcodeBelumTerdaftarFlow = MutableStateFlow<String?>(null)
 
     val uiState: StateFlow<KasirUiState> = combine(
         queryFlow.flatMapLatest { q -> if (q.isBlank()) productRepository.observeActive() else productRepository.search(q) },
@@ -64,8 +62,7 @@ class KasirViewModel @Inject constructor(
         prosesBayarFlow,
         previewStrukFlow,
         sedangMencetakFlow,
-        nomorAntrianBerhasilFlow,
-        barcodeBelumTerdaftarFlow
+        nomorAntrianBerhasilFlow
     ) { flows ->
         @Suppress("UNCHECKED_CAST")
         KasirUiState(
@@ -77,8 +74,7 @@ class KasirViewModel @Inject constructor(
             isProsesBayar = flows[5] as Boolean,
             previewStruk = flows[6] as String?,
             sedangMencetak = flows[7] as Boolean,
-            nomorAntrianBerhasil = flows[8] as Int?,
-            barcodeBelumTerdaftar = flows[9] as String?
+            nomorAntrianBerhasil = flows[8] as Int?
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), KasirUiState())
 
@@ -117,23 +113,9 @@ class KasirViewModel @Inject constructor(
         viewModelScope.launch {
             val product = productRepository.cariByBarcode(barcode)
             if (product == null) {
-                // Barcode belum ada di data produk -> layar Kasir menawarkan "Tambah Produk Baru"
-                barcodeBelumTerdaftarFlow.value = barcode
+                errorFlow.value = "Produk belum terdaftar."
             } else {
                 tambahKeKeranjang(product)
-            }
-        }
-    }
-
-    fun tutupBarcodeBelumTerdaftar() { barcodeBelumTerdaftarFlow.value = null }
-
-    /** Simpan produk baru dari dialog "Produk belum terdaftar" (barcode hasil scan sudah terisi). */
-    fun simpanProdukBaru(product: ProductEntity) {
-        viewModelScope.launch {
-            barcodeBelumTerdaftarFlow.value = null
-            when (val result = productRepository.simpan(product)) {
-                is Result.Failure -> errorFlow.value = result.error.pesan
-                is Result.Success -> Unit
             }
         }
     }
