@@ -39,6 +39,17 @@ object BeepPlayer {
         }
     }
 
+    /**
+     * Dipanggil sekali saat aplikasi dibuka (lihat [com.nada.kasir.NadaKasirApp]) untuk
+     * "memanaskan" gelombang nada ([nada], properti `by lazy`) di awal - supaya bip pertama
+     * saat scan barcode langsung terdengar tanpa jeda hitung gelombang. Context tidak
+     * dipakai (AudioTrack di sini tidak butuh Context sama sekali), cuma disediakan supaya
+     * pemanggilan di Application.onCreate() konsisten dan jelas maksudnya.
+     */
+    fun init(context: android.content.Context) {
+        nada // akses saja untuk memicu inisialisasi lazy-nya lebih awal
+    }
+
     fun beep() {
         if (!bunyiLewatAudioTrack()) bunyiLewatToneGenerator()
     }

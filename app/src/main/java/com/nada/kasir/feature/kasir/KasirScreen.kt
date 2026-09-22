@@ -42,6 +42,7 @@ import java.io.File
 @Composable
 fun KasirScreen(
     currentUserId: Long,
+    isAdmin: Boolean = true,
     viewModel: KasirViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
