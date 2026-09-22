@@ -2,31 +2,20 @@ package com.nada.kasir.feature.produk
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.AsyncImage
 import com.nada.kasir.core.data.local.entity.ProductEntity
 import com.nada.kasir.core.util.CurrencyFormatter
 import com.nada.kasir.core.util.FileShareHelper
-import com.nada.kasir.core.util.ProductPhotoStorageHelper
-import java.io.File
 
 /** Halaman DATA PRODUK (poin 6), dengan Import/Export Excel (poin 15, Phase 3). */
 @Composable
@@ -74,7 +63,6 @@ fun ProdukScreen(isAdmin: Boolean = true, viewModel: ProdukViewModel = hiltViewM
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(produkList) { produk ->
                     ListItem(
-                        leadingContent = { FotoProdukThumbnail(fotoPath = produk.fotoPath, nama = produk.nama) },
                         headlineContent = { Text(produk.nama) },
                         supportingContent = {
                             Text("${produk.kodeProduk} • Stok: ${produk.stok} • ${CurrencyFormatter.format(produk.hargaJual)}")
@@ -133,64 +121,25 @@ fun ProdukScreen(isAdmin: Boolean = true, viewModel: ProdukViewModel = hiltViewM
 }
 
 @Composable
-private fun ProdukFormDialog(
+internal fun ProdukFormDialog(
     initial: ProductEntity?,
     onDismiss: () -> Unit,
-    onSimpan: (ProductEntity) -> Unit
+    onSimpan: (ProductEntity) -> Unit,
+    initialBarcode: String? = null // diisi dari hasil scan di layar Kasir
 ) {
     var kode by remember { mutableStateOf(initial?.kodeProduk ?: "") }
-    var barcode by remember { mutableStateOf(initial?.barcode ?: "") }
+    var barcode by remember { mutableStateOf(initial?.barcode ?: initialBarcode ?: "") }
     var nama by remember { mutableStateOf(initial?.nama ?: "") }
     var hargaBeli by remember { mutableStateOf(initial?.hargaBeli?.toString() ?: "") }
     var hargaJual by remember { mutableStateOf(initial?.hargaJual?.toString() ?: "") }
     var stok by remember { mutableStateOf(initial?.stok?.toString() ?: "0") }
     var stokMin by remember { mutableStateOf(initial?.stokMinimum?.toString() ?: "5") }
-    var fotoPath by remember { mutableStateOf(initial?.fotoPath) }
-    val context = LocalContext.current
-
-    val pilihFoto = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) {
-            ProductPhotoStorageHelper.simpanFotoDariUri(context, uri)?.let { path -> fotoPath = path }
-        }
-    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initial == null) "Tambah Produk" else "Edit Produk") },
         text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-            ) {
-                // Foto produk - dipakai sebagai gambar di grid Kasir, supaya kasir/pembeli
-                // lebih mudah mengenali produk sekilas (bukan cuma dari nama teks).
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val path = fotoPath
-                        if (!path.isNullOrBlank() && File(path).exists()) {
-                            AsyncImage(
-                                model = File(path),
-                                contentDescription = "Foto produk",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
-                            )
-                        } else {
-                            Icon(Icons.Filled.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        }
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    OutlinedButton(onClick = { pilihFoto.launch("image/*") }) {
-                        Text(if (fotoPath.isNullOrBlank()) "Unggah Foto" else "Ganti Foto")
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
+            Column {
                 OutlinedTextField(kode, { kode = it }, label = { Text("Kode Produk") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(barcode, { barcode = it }, label = { Text("Barcode") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(nama, { nama = it }, label = { Text("Nama Produk") }, modifier = Modifier.fillMaxWidth())
@@ -212,35 +161,11 @@ private fun ProdukFormDialog(
                         hargaBeli = hargaBeli.toDoubleOrNull() ?: 0.0,
                         hargaJual = hargaJual.toDoubleOrNull() ?: 0.0,
                         stok = stok.toIntOrNull() ?: 0,
-                        stokMinimum = stokMin.toIntOrNull() ?: 5,
-                        fotoPath = fotoPath
+                        stokMinimum = stokMin.toIntOrNull() ?: 5
                     )
                 )
             }) { Text("Simpan") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
     )
-}
-
-/** Thumbnail kecil bulat untuk daftar produk - foto asli kalau ada, fallback ikon generik. */
-@Composable
-private fun FotoProdukThumbnail(fotoPath: String?, nama: String) {
-    Box(
-        modifier = Modifier
-            .size(44.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)),
-        contentAlignment = Alignment.Center
-    ) {
-        if (!fotoPath.isNullOrBlank() && File(fotoPath).exists()) {
-            AsyncImage(
-                model = File(fotoPath),
-                contentDescription = nama,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))
-            )
-        } else {
-            Icon(Icons.Filled.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-        }
-    }
 }

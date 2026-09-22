@@ -3,13 +3,13 @@ package com.nada.kasir.feature.kasir
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CameraAlt
@@ -21,16 +21,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.nada.kasir.core.data.local.entity.MetodePembayaran
+import com.nada.kasir.core.util.BeepPlayer
 import com.nada.kasir.core.util.CurrencyFormatter
 import com.nada.kasir.core.util.HandheldScannerDetector
 import com.nada.kasir.feature.kasir.barcode.BarcodeScannerScreen
+import com.nada.kasir.feature.produk.ProdukFormDialog
 import com.nada.kasir.feature.struk.StrukPreviewDialog
-import java.io.File
 
 /**
  * Halaman Kasir - fitur utama aplikasi (poin 4).
@@ -42,17 +42,19 @@ import java.io.File
 @Composable
 fun KasirScreen(
     currentUserId: Long,
-    isAdmin: Boolean = true,
+    isAdmin: Boolean = false,
     viewModel: KasirViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
     var showPembayaranDialog by remember { mutableStateOf(false) }
     var showBarcodeScanner by remember { mutableStateOf(false) }
     var showKeranjangSheet by remember { mutableStateOf(false) }
+    var tampilFormProdukBaru by remember { mutableStateOf(false) }
 
     // Buffer untuk membedakan ketikan scanner fisik (handheld) vs ketikan manual kasir (poin 5, Phase 2)
     val handheldDetector = remember {
         HandheldScannerDetector(onBarcodeTerdeteksi = { kode ->
+            BeepPlayer.beep()
             viewModel.tambahDariBarcode(kode)
             viewModel.onQueryChange("")
         })
@@ -61,6 +63,7 @@ fun KasirScreen(
     if (showBarcodeScanner) {
         BarcodeScannerScreen(
             onDetected = { kode ->
+                BeepPlayer.beep()
                 showBarcodeScanner = false
                 viewModel.tambahDariBarcode(kode)
             },
@@ -85,6 +88,45 @@ fun KasirScreen(
             )
         }
         return
+    }
+
+    // Barcode terbaca tapi belum ada di data produk -> tawarkan tambah produk baru
+    state.barcodeBelumTerdaftar?.let { kode ->
+        if (isAdmin && tampilFormProdukBaru) {
+            ProdukFormDialog(
+                initial = null,
+                initialBarcode = kode,
+                onDismiss = {
+                    tampilFormProdukBaru = false
+                    viewModel.tutupBarcodeBelumTerdaftar()
+                },
+                onSimpan = { produk ->
+                    tampilFormProdukBaru = false
+                    viewModel.simpanProdukBaru(produk)
+                }
+            )
+        } else if (isAdmin) {
+            AlertDialog(
+                onDismissRequest = { viewModel.tutupBarcodeBelumTerdaftar() },
+                title = { Text("Produk belum terdaftar") },
+                text = { Text("Barcode $kode belum ada di data produk. Tambahkan sebagai produk baru?") },
+                confirmButton = {
+                    TextButton(onClick = { tampilFormProdukBaru = true }) { Text("Tambah Produk Baru") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.tutupBarcodeBelumTerdaftar() }) { Text("Batal") }
+                }
+            )
+        } else {
+            AlertDialog(
+                onDismissRequest = { viewModel.tutupBarcodeBelumTerdaftar() },
+                title = { Text("Produk belum terdaftar") },
+                text = { Text("Barcode $kode belum ada di data produk. Minta admin untuk menambahkannya.") },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.tutupBarcodeBelumTerdaftar() }) { Text("OK") }
+                }
+            )
+        }
     }
 
     state.errorPesan?.let { pesan ->
@@ -127,13 +169,13 @@ fun KasirScreen(
                 }
             )
             Spacer(Modifier.height(8.dp))
-            // Grid adaptif: jumlah kolom menyesuaikan lebar layar (HP kecil, HP besar,
-            // atau tablet) tanpa perlu logic manual - minSize dijaga cukup kecil (112dp)
-            // supaya di HP portrait tetap dapat 3 kolom yang ringkas, bukan cuma 2.
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 112.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                // Adaptive = jumlah kolom menyesuaikan sendiri lebar layar (HP kecil, HP besar,
+                // atau tablet) - kartu diusahakan sekitar 108dp, minimal 96dp di layar tersempit.
+                columns = GridCells.Adaptive(minSize = 108.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = 4.dp),
                 modifier = Modifier.weight(1f)
             ) {
                 items(state.produk, key = { it.id }) { produk ->
@@ -189,16 +231,11 @@ fun KasirScreen(
 }
 
 /**
- * Kartu produk di grid Kasir - didesain ULANG supaya:
- * - RINGKAS: padding & tipografi dipadatkan, hanya info yang benar-benar perlu
- *   dilihat kasir sekilas (foto, nama, harga, stok/badge keranjang).
- * - ADAPTIF: mengikuti lebar kolom grid (GridCells.Adaptive di pemanggil), jadi
- *   otomatis menyesuaikan jumlah kolom di HP kecil, HP besar, maupun tablet.
- * - NYAMAN DI LAYAR VERTIKAL: foto persegi (1:1) di atas + teks di bawah adalah
- *   susunan yang paling wajar dibaca dari atas ke bawah di layar portrait,
- *   dibanding kartu lebar/horizontal yang gampang membuat teks terpotong.
- * - ADA FOTO PRODUK: foto asli (dari fotoPath) ditampilkan penuh di kotak atas;
- *   kalau produk belum punya foto, tampil placeholder ikon supaya grid tetap rapi.
+ * Kartu produk di grid Kasir - dibuat RINGKAS (padding & teks kecil, maks 1 baris nama)
+ * supaya makin banyak produk terlihat sekaligus tanpa scroll berlebihan, tapi tetap
+ * NYAMAN disentuh (kartu persegi utuh yang bisa ditekan, bukan cuma teks kecil).
+ * Foto produk mengisi bagian atas kartu; kalau belum ada foto, tampil ikon netral
+ * supaya grid tetap rapi (bukan lubang kosong).
  */
 @Composable
 private fun ProdukKasirCard(
@@ -211,44 +248,27 @@ private fun ProdukKasirCard(
 ) {
     ElevatedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column {
-            // Foto produk - persegi (aspectRatio 1f) supaya grid tetap rapi berbaris
-            // walau ukuran foto asli macam-macam, dan badge keranjang menumpuk rapi di pojok.
-            Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
-                if (!fotoPath.isNullOrBlank() && File(fotoPath).exists()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f) // foto selalu persegi -> grid rapi walau kartu ikut melebar/menyempit
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!fotoPath.isNullOrBlank() && java.io.File(fotoPath).exists()) {
                     AsyncImage(
-                        model = File(fotoPath),
+                        model = java.io.File(fotoPath),
                         contentDescription = nama,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Filled.Inventory2,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                }
-                if (stok <= 0) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.errorContainer,
-                        modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter)
-                    ) {
-                        Text(
-                            "Habis",
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            style = MaterialTheme.typography.labelSmall,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
-                        )
-                    }
+                    Icon(
+                        Icons.Filled.Inventory2,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(28.dp)
+                    )
                 }
                 if (jumlahDiKeranjang > 0) {
                     Surface(
@@ -257,35 +277,39 @@ private fun ProdukKasirCard(
                         modifier = Modifier.align(Alignment.TopEnd)
                     ) {
                         Text(
-                            "×$jumlahDiKeranjang",
+                            "$jumlahDiKeranjang",
                             color = androidx.compose.ui.graphics.Color.White,
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                if (stok <= 0) {
+                    Surface(
+                        color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.55f),
+                        modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter)
+                    ) {
+                        Text(
+                            "Habis",
+                            color = androidx.compose.ui.graphics.Color.White,
+                            style = MaterialTheme.typography.labelSmall,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                         )
                     }
                 }
             }
-
             Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
                 Text(
                     nama,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 2,
-                    minLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
-                Spacer(Modifier.height(2.dp))
                 Text(
                     CurrencyFormatter.format(harga),
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.primary,
                     maxLines = 1
-                )
-                Text(
-                    "Stok: $stok",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
