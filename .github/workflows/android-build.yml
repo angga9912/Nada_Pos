@@ -40,10 +40,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if ! ./gradlew testDemoDebugUnitTest --no-daemon --stacktrace > build.log 2>&1; then
+          if ! ./gradlew testDemoDebugUnitTest --no-daemon > build.log 2>&1; then
             cat build.log
-            ERR=$(tail -n 60 build.log)
-            gh api /repos/angga9912/Nada_Pos/issues/1/comments -f body="Build failure:
+            ERR=$(grep -E "(^e:|^w:)" build.log | head -n 40)
+            if [ -z "$ERR" ]; then
+              ERR=$(tail -n 120 build.log | head -n 40)
+            fi
+            gh api /repos/angga9912/Nada_Pos/issues/1/comments -f body="Kotlin compilation errors:
             \`\`\`
             $ERR
             \`\`\`" || true
