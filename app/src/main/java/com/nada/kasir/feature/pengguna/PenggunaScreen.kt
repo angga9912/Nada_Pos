@@ -57,15 +57,13 @@ fun PenggunaScreen(
                         trailingContent = {
                             Row {
                                 IconButton(
-                                    onClick = { userUntukResetPassword = user },
-                                    contentDescription = "Ganti Password"
+                                    onClick = { userUntukResetPassword = user }
                                 ) {
                                     Icon(Icons.Default.Lock, contentDescription = "Ganti Password", tint = MaterialTheme.colorScheme.primary)
                                 }
                                 if (user.id != currentUserId) {
                                     IconButton(
-                                        onClick = { userUntukHapus = user },
-                                        contentDescription = "Hapus Pengguna"
+                                        onClick = { userUntukHapus = user }
                                     ) {
                                         Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = MaterialTheme.colorScheme.error)
                                     }
