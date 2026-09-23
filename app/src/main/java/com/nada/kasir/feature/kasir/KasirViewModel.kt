@@ -79,6 +79,7 @@ class KasirViewModel @Inject constructor(
     private val storeFlow: Flow<StoreEntity?> = storeRepository.observeStore()
     private val printerAdaFlow: Flow<Boolean> = printerRepository.observeAll().map { it.isNotEmpty() }
 
+    @Suppress("UNCHECKED_CAST")
     val uiState: StateFlow<KasirUiState> = combine(
         queryFlow.flatMapLatest { q -> if (q.isBlank()) productRepository.observeActive() else productRepository.search(q) },
         keranjangFlow,
@@ -98,9 +99,7 @@ class KasirViewModel @Inject constructor(
         printerAdaFlow,
         sessionManager.currentUser
     ) { flows ->
-        @Suppress("UNCHECKED_CAST")
         val rawProduk = flows[0] as List<ProductEntity>
-        @Suppress("UNCHECKED_CAST")
         val keranjang = flows[1] as List<KeranjangItem>
         val diskonTotal = flows[2] as Double
         val errorPesan = flows[3] as String?
@@ -110,9 +109,9 @@ class KasirViewModel @Inject constructor(
         val sedangMencetak = flows[7] as Boolean
         val nomorAntrianBerhasil = flows[8] as Int?
         val barcodeBelumTerdaftar = flows[9] as String?
-        @Suppress("UNCHECKED_CAST")
-        val (kategoriId, kategoriNama) = flows[10] as Pair<Long?, String>
-        @Suppress("UNCHECKED_CAST")
+        val kategoriPair = flows[10] as Pair<Long?, String>
+        val kategoriId = kategoriPair.first
+        val kategoriNama = kategoriPair.second
         val kategoriList = flows[11] as List<CategoryEntity>
         val storeData = flows[12] as StoreEntity?
         val namaPelanggan = flows[13] as String
