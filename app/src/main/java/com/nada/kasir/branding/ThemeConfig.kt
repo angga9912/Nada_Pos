@@ -11,8 +11,8 @@ import androidx.compose.ui.graphics.Color
  */
 object ThemeConfig {
 
-    /** Warna default kalau data toko belum ada / hex tidak valid (NADA Blue). */
-    private val WARNA_FALLBACK = Color(0xFF1976D2)
+    /** Warna default kalau data toko belum ada / hex tidak valid. */
+    private val WARNA_FALLBACK = Color(0xFF2E7D32)
 
     fun buatColorScheme(warnaHex: String): ColorScheme {
         val primary = parseHexAman(warnaHex)

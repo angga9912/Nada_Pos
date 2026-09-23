@@ -80,25 +80,23 @@ class KasirViewModel @Inject constructor(
     private val printerAdaFlow: Flow<Boolean> = printerRepository.observeAll().map { it.isNotEmpty() }
 
     val uiState: StateFlow<KasirUiState> = combine(
-        listOf(
-            queryFlow.flatMapLatest { q -> if (q.isBlank()) productRepository.observeActive() else productRepository.search(q) },
-            keranjangFlow,
-            diskonFlow,
-            errorFlow,
-            transaksiBerhasilFlow,
-            prosesBayarFlow,
-            previewStrukFlow,
-            sedangMencetakFlow,
-            nomorAntrianBerhasilFlow,
-            barcodeBelumTerdaftarFlow,
-            kategoriTerpilihFlow,
-            categoriesFlow,
-            storeFlow,
-            namaPelangganFlow,
-            catatanTransaksiFlow,
-            printerAdaFlow,
-            sessionManager.currentUser
-        )
+        queryFlow.flatMapLatest { q -> if (q.isBlank()) productRepository.observeActive() else productRepository.search(q) },
+        keranjangFlow,
+        diskonFlow,
+        errorFlow,
+        transaksiBerhasilFlow,
+        prosesBayarFlow,
+        previewStrukFlow,
+        sedangMencetakFlow,
+        nomorAntrianBerhasilFlow,
+        barcodeBelumTerdaftarFlow,
+        kategoriTerpilihFlow,
+        categoriesFlow,
+        storeFlow,
+        namaPelangganFlow,
+        catatanTransaksiFlow,
+        printerAdaFlow,
+        sessionManager.currentUser
     ) { flows ->
         @Suppress("UNCHECKED_CAST")
         val rawProduk = flows[0] as List<ProductEntity>
