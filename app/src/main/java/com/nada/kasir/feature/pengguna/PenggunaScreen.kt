@@ -6,7 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -60,7 +60,7 @@ fun PenggunaScreen(
                                     onClick = { userUntukResetPassword = user },
                                     contentDescription = "Ganti Password"
                                 ) {
-                                    Icon(Icons.Default.Key, contentDescription = "Ganti Password", tint = MaterialTheme.colorScheme.primary)
+                                    Icon(Icons.Default.Lock, contentDescription = "Ganti Password", tint = MaterialTheme.colorScheme.primary)
                                 }
                                 if (user.id != currentUserId) {
                                     IconButton(

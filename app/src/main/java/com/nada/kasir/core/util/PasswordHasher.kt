@@ -26,7 +26,8 @@ object PasswordHasher {
         SecureRandom().nextBytes(salt)
         val spec = PBEKeySpec(password.toCharArray(), salt, ITERASI, PANJANG_KUNCI_BIT)
         val factory = SecretKeyFactory.getInstance(ALGORITMA_PBKDF2)
-        val hashedBytes = factory.generateSecret(spec).encoded
+        val secretKey = factory.generateSecret(spec)
+        val hashedBytes = checkNotNull(secretKey.encoded) { "Encoded key tidak boleh null" }
         val saltB64 = Base64.getEncoder().encodeToString(salt)
         val hashB64 = Base64.getEncoder().encodeToString(hashedBytes)
         return "PBKDF2:$ITERASI:$saltB64:$hashB64"
@@ -49,7 +50,8 @@ object PasswordHasher {
 
             val spec = PBEKeySpec(password.toCharArray(), salt, iterasi, expectedHash.size * 8)
             val factory = SecretKeyFactory.getInstance(ALGORITMA_PBKDF2)
-            val calculatedHash = factory.generateSecret(spec).encoded
+            val secretKey = factory.generateSecret(spec)
+            val calculatedHash = secretKey.encoded ?: return false
             return MessageDigest.isEqual(expectedHash, calculatedHash)
         }
 

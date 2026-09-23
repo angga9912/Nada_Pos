@@ -82,7 +82,7 @@ fun PengaturanHubScreen(
                     ItemPengaturan(
                         judul = "Ganti Password Saya",
                         subjudul = "Ubah kata sandi akun ${viewModel.currentUserName}",
-                        ikon = Icons.Filled.LockReset,
+                        ikon = Icons.Filled.Lock,
                         onClick = { showDialogGantiPassword = true }
                     )
                 )

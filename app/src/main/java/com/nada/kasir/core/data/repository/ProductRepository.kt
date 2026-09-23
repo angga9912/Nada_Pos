@@ -28,8 +28,9 @@ class ProductRepository @Inject constructor(
 
     suspend fun simpan(product: ProductEntity): Result<Long> {
         // Barcode tidak boleh duplikat (poin 5), baik saat tambah baru maupun edit produk lama
-        if (!product.barcode.isNullOrBlank()) {
-            val duplikat = productDao.countByBarcodeExcludingId(product.barcode, product.id)
+        val barcode = product.barcode
+        if (!barcode.isNullOrBlank()) {
+            val duplikat = productDao.countByBarcodeExcludingId(barcode, product.id)
             if (duplikat > 0) {
                 return Result.Failure(AppError.BarcodeDuplikat)
             }
