@@ -11,8 +11,8 @@ import androidx.compose.ui.graphics.Color
  */
 object ThemeConfig {
 
-    /** Warna default kalau data toko belum ada / hex tidak valid. */
-    private val WARNA_FALLBACK = Color(0xFF2E7D32)
+    /** Warna default kalau data toko belum ada / hex tidak valid (NADA Blue). */
+    private val WARNA_FALLBACK = Color(0xFF1976D2)
 
     fun buatColorScheme(warnaHex: String): ColorScheme {
         val primary = parseHexAman(warnaHex)
@@ -40,7 +40,7 @@ object ThemeConfig {
 
     /** Pilihan warna preset yang ditawarkan di Pengaturan Toko - tetap bisa custom hex manual. */
     val PRESET_WARNA = listOf(
-        "#2E7D32" to "Hijau", "#1565C0" to "Biru", "#C62828" to "Merah",
-        "#EF6C00" to "Oranye", "#6A1B9A" to "Ungu", "#00838F" to "Toska"
+        "#1976D2" to "Biru NADA", "#2E7D32" to "Hijau", "#1565C0" to "Biru Tua",
+        "#C62828" to "Merah", "#EF6C00" to "Oranye", "#6A1B9A" to "Ungu", "#00838F" to "Toska"
     )
 }

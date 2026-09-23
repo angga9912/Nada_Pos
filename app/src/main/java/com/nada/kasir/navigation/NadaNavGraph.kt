@@ -47,11 +47,11 @@ sealed class NadaRoute(val route: String) {
 }
 
 private enum class TabUtama(val label: String, val ikon: androidx.compose.ui.graphics.vector.ImageVector) {
-    HOME("Home", Icons.Filled.Home),
     KASIR("Kasir", Icons.Filled.PointOfSale),
     PRODUK("Produk", Icons.Filled.Inventory2),
-    TRANSAKSI("Transaksi", Icons.Filled.ReceiptLong),
-    PENGATURAN("Pengaturan", Icons.Filled.Settings)
+    LAPORAN("Laporan", Icons.Filled.Assessment),
+    STOK("Stok", Icons.Filled.ReceiptLong),
+    LAINNYA("Lainnya", Icons.Filled.Settings)
 }
 
 @Composable
@@ -172,9 +172,8 @@ private fun AdminRouteGuard(
  */
 @Composable
 private fun MainShell(navController: NavHostController, sessionManager: SessionManager) {
-    var tabAktif by rememberSaveable { mutableStateOf(TabUtama.HOME) }
+    var tabAktif by rememberSaveable { mutableStateOf(TabUtama.KASIR) }
     val isAdmin = sessionManager.isAdmin()
-    val namaPengguna = sessionManager.currentUser.value?.nama ?: "Pengguna"
     val currentUserId = sessionManager.currentUser.value?.id ?: 1L
 
     fun logout() {
@@ -184,66 +183,55 @@ private fun MainShell(navController: NavHostController, sessionManager: SessionM
 
     Scaffold(
         bottomBar = {
-            Box {
-                NavigationBar {
-                    TabUtama.values().forEach { tab ->
-                        if (tab == TabUtama.PRODUK) {
-                            NavigationBarItem(
-                                selected = false,
-                                onClick = {},
-                                enabled = false,
-                                icon = {},
-                                label = {},
-                                colors = NavigationBarItemDefaults.colors(
-                                    unselectedIconColor = Color.Transparent,
-                                    indicatorColor = Color.Transparent
-                                )
+            NavigationBar(
+                containerColor = Color.White,
+                tonalElevation = 4.dp
+            ) {
+                TabUtama.values().forEach { tab ->
+                    NavigationBarItem(
+                        selected = tabAktif == tab,
+                        onClick = { tabAktif = tab },
+                        icon = { Icon(tab.ikon, contentDescription = tab.label) },
+                        label = {
+                            Text(
+                                tab.label,
+                                fontWeight = if (tabAktif == tab) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal
                             )
-                        } else {
-                            NavigationBarItem(
-                                selected = tabAktif == tab,
-                                onClick = { tabAktif = tab },
-                                icon = { Icon(tab.ikon, contentDescription = tab.label) },
-                                label = { Text(tab.label) }
-                            )
-                        }
-                    }
-                }
-                FloatingActionButton(
-                    onClick = { tabAktif = TabUtama.PRODUK },
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .offset(y = (-26).dp)
-                        .size(56.dp),
-                    shape = CircleShape,
-                    containerColor = if (tabAktif == TabUtama.PRODUK) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = if (tabAktif == TabUtama.PRODUK) Color.White else MaterialTheme.colorScheme.onPrimaryContainer,
-                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
-                ) {
-                    Icon(TabUtama.PRODUK.ikon, contentDescription = TabUtama.PRODUK.label)
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Color(0xFF1976D2),
+                            selectedTextColor = Color(0xFF1976D2),
+                            indicatorColor = Color(0xFFE3F2FD),
+                            unselectedIconColor = Color(0xFF64748B),
+                            unselectedTextColor = Color(0xFF64748B)
+                        )
+                    )
                 }
             }
         }
     ) { padding ->
         Box(modifier = Modifier.padding(padding)) {
             when (tabAktif) {
-                TabUtama.HOME -> DashboardScreen(
-                    isAdmin = isAdmin,
-                    namaPengguna = namaPengguna,
-                    onBukaKasir = { tabAktif = TabUtama.KASIR },
-                    onBukaProduk = { tabAktif = TabUtama.PRODUK },
-                    onBukaRiwayat = { tabAktif = TabUtama.TRANSAKSI },
-                    onBukaPengaturanPrinter = { navController.navigate(NadaRoute.PengaturanPrinter.route) },
-                    onBukaBackup = { navController.navigate(NadaRoute.Backup.route) },
-                    onBukaLaporan = { navController.navigate(NadaRoute.Laporan.route) },
-                    onBukaPengaturanToko = { navController.navigate(NadaRoute.PengaturanToko.route) },
-                    onBukaPengguna = { navController.navigate(NadaRoute.Pengguna.route) },
-                    onLogout = ::logout
-                )
                 TabUtama.KASIR -> KasirScreen(currentUserId = currentUserId, isAdmin = isAdmin)
                 TabUtama.PRODUK -> ProdukScreen(isAdmin = isAdmin)
-                TabUtama.TRANSAKSI -> RiwayatScreen(isAdmin = isAdmin)
-                TabUtama.PENGATURAN -> PengaturanHubScreen(
+                TabUtama.LAPORAN -> {
+                    if (isAdmin) {
+                        LaporanScreen()
+                    } else {
+                        Box(
+                            modifier = Modifier.fillMaxSize().padding(24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Laporan hanya dapat diakses oleh Administrator.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+                TabUtama.STOK -> RiwayatScreen(isAdmin = isAdmin)
+                TabUtama.LAINNYA -> PengaturanHubScreen(
                     isAdmin = isAdmin,
                     onBukaPengaturanPrinter = { navController.navigate(NadaRoute.PengaturanPrinter.route) },
                     onBukaPengaturanToko = { navController.navigate(NadaRoute.PengaturanToko.route) },
