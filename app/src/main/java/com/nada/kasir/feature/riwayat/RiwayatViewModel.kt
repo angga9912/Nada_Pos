@@ -8,6 +8,7 @@ import com.nada.kasir.core.data.repository.StoreRepository
 import com.nada.kasir.core.data.repository.TransactionRepository
 import com.nada.kasir.core.printer.BluetoothPrinterManager
 import com.nada.kasir.core.printer.StrukFormatter
+import com.nada.kasir.core.session.SessionManager
 import com.nada.kasir.core.util.Result
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -20,7 +21,8 @@ class RiwayatViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val storeRepository: StoreRepository,
     private val printerRepository: PrinterRepository,
-    private val bluetoothPrinterManager: BluetoothPrinterManager
+    private val bluetoothPrinterManager: BluetoothPrinterManager,
+    private val sessionManager: SessionManager
 ) : ViewModel() {
 
     private val queryFlow = MutableStateFlow("")
@@ -43,6 +45,10 @@ class RiwayatViewModel @Inject constructor(
     fun onQueryChange(q: String) { queryFlow.value = q }
 
     fun batalkanTransaksi(id: Long, onError: (String) -> Unit) {
+        if (!sessionManager.isAdmin()) {
+            onError("Hanya Administrator yang berhak membatalkan transaksi.")
+            return
+        }
         viewModelScope.launch {
             when (val r = transactionRepository.batalkanTransaksi(id)) {
                 is Result.Failure -> onError(r.error.pesan)

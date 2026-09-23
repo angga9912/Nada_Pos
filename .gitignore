@@ -1,0 +1,38 @@
+# Built application files
+*.apk
+*.aar
+*.aab
+
+# Keystore and license secrets - CRITICAL SECURITY
+keystore.properties
+*.keystore
+*.jks
+*.p12
+license.private
+license.secret*
+
+# Gradle files
+.gradle/
+build/
+*/build/
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+.shelf/
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Log files and crash dumps
+*.log
+*.hprof
+
+# Exported temp data
+export/
+backup/
+crash_terakhir.txt

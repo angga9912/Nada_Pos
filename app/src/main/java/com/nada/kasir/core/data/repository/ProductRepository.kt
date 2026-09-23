@@ -27,10 +27,10 @@ class ProductRepository @Inject constructor(
     suspend fun cariByBarcode(barcode: String): ProductEntity? = productDao.findByBarcode(barcode)
 
     suspend fun simpan(product: ProductEntity): Result<Long> {
-        // Barcode tidak boleh duplikat (poin 5)
+        // Barcode tidak boleh duplikat (poin 5), baik saat tambah baru maupun edit produk lama
         if (!product.barcode.isNullOrBlank()) {
-            val jumlah = productDao.countByBarcode(product.barcode)
-            if (jumlah > 0 && product.id == 0L) {
+            val duplikat = productDao.countByBarcodeExcludingId(product.barcode, product.id)
+            if (duplikat > 0) {
                 return Result.Failure(AppError.BarcodeDuplikat)
             }
         }

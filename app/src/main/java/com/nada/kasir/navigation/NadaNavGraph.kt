@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.nada.kasir.core.data.local.entity.UserRole
 import com.nada.kasir.core.session.SessionManager
 import com.nada.kasir.feature.backup.BackupScreen
 import com.nada.kasir.feature.dashboard.DashboardScreen
@@ -56,9 +57,8 @@ private enum class TabUtama(val label: String, val ikon: androidx.compose.ui.gra
 @Composable
 fun NadaNavGraph(navController: NavHostController = rememberNavController()) {
     val context = LocalContext.current
-    // Onboarding cuma tampil SEKALI di pembukaan pertama - dicek dari SharedPreferences.
-    // remember (bukan dicek ulang tiap recomposition) supaya nggak "lompat" balik ke
-    // onboarding kalau layar lain memicu recomposition NavHost ini.
+    val sessionManager = hiltViewModelSession()
+
     val startDestination = remember {
         if (OnboardingPreference.sudahLihat(context)) NadaRoute.Login.route else NadaRoute.Onboarding.route
     }
@@ -82,15 +82,84 @@ fun NadaNavGraph(navController: NavHostController = rememberNavController()) {
         composable(NadaRoute.MainShell.route) {
             MainShell(
                 navController = navController,
-                sessionManager = hiltViewModelSession()
+                sessionManager = sessionManager
             )
         }
-        composable(NadaRoute.PengaturanPrinter.route) { PengaturanPrinterScreen() }
-        composable(NadaRoute.Backup.route) { BackupScreen() }
-        composable(NadaRoute.Laporan.route) { LaporanScreen() }
-        composable(NadaRoute.PengaturanToko.route) { PengaturanTokoScreen() }
-        composable(NadaRoute.Pengguna.route) { PenggunaScreen() }
-        composable(NadaRoute.InfoPaket.route) { InfoPaketScreen(onKembali = { navController.popBackStack() }) }
+        composable(NadaRoute.PengaturanPrinter.route) {
+            AdminRouteGuard(sessionManager, navController) {
+                PengaturanPrinterScreen()
+            }
+        }
+        composable(NadaRoute.Backup.route) {
+            AdminRouteGuard(sessionManager, navController) {
+                BackupScreen()
+            }
+        }
+        composable(NadaRoute.Laporan.route) {
+            AdminRouteGuard(sessionManager, navController) {
+                LaporanScreen()
+            }
+        }
+        composable(NadaRoute.PengaturanToko.route) {
+            AdminRouteGuard(sessionManager, navController) {
+                PengaturanTokoScreen()
+            }
+        }
+        composable(NadaRoute.Pengguna.route) {
+            AdminRouteGuard(sessionManager, navController) {
+                val currentUserId = sessionManager.currentUser.value?.id ?: 1L
+                PenggunaScreen(currentUserId = currentUserId)
+            }
+        }
+        composable(NadaRoute.InfoPaket.route) {
+            InfoPaketScreen(onKembali = { navController.popBackStack() })
+        }
+    }
+}
+
+/**
+ * Route Guard untuk membatasi akses halaman sensitif/administratif (RBAC).
+ * Jika belum login -> diarahkan ke Login.
+ * Jika login sebagai Kasir -> diblokir dengan pesan Akses Dibatasi.
+ */
+@Composable
+private fun AdminRouteGuard(
+    sessionManager: SessionManager,
+    navController: NavHostController,
+    content: @Composable () -> Unit
+) {
+    val currentUser by sessionManager.currentUser.collectAsState()
+
+    if (currentUser == null) {
+        LaunchedEffect(Unit) {
+            navController.navigate(NadaRoute.Login.route) {
+                popUpTo(0) { inclusive = true }
+            }
+        }
+    } else if (currentUser?.role != UserRole.ADMIN) {
+        Box(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "Akses Dibatasi",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.error
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Halaman ini memerlukan hak akses Administrator.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(Modifier.height(16.dp))
+                Button(onClick = { navController.popBackStack() }) {
+                    Text("Kembali")
+                }
+            }
+        }
+    } else {
+        content()
     }
 }
 
@@ -115,15 +184,10 @@ private fun MainShell(navController: NavHostController, sessionManager: SessionM
 
     Scaffold(
         bottomBar = {
-            // Bottom bar dengan tombol tengah melayang (floating) - meniru posisi tombol
-            // "scan" bulat pada referensi desain, tapi di sini dipakai untuk akses cepat
-            // ke tab Produk yang memang sudah berada di posisi tengah susunan tab.
             Box {
                 NavigationBar {
                     TabUtama.values().forEach { tab ->
                         if (tab == TabUtama.PRODUK) {
-                            // Slot dikosongkan di bar rata - tombol asli untuk tab ini
-                            // ditampilkan sebagai FloatingActionButton bulat di atasnya.
                             NavigationBarItem(
                                 selected = false,
                                 onClick = {},
@@ -161,7 +225,7 @@ private fun MainShell(navController: NavHostController, sessionManager: SessionM
             }
         }
     ) { padding ->
-        androidx.compose.foundation.layout.Box(modifier = androidx.compose.ui.Modifier.padding(padding)) {
+        Box(modifier = Modifier.padding(padding)) {
             when (tabAktif) {
                 TabUtama.HOME -> DashboardScreen(
                     isAdmin = isAdmin,

@@ -5,29 +5,32 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.nada.kasir.core.paket.PaketAplikasi
+import com.nada.kasir.core.util.Result
 
 private data class ItemPengaturan(
     val judul: String, val subjudul: String, val ikon: ImageVector, val onClick: () -> Unit
 )
 
 /**
- * Tab "Pengaturan" (hasil pengelompokan menu dari Dashboard - poin 5 & 6 brief redesign).
- * Untuk KASIR, hanya opsi non-administratif yang ditampilkan (poin 18: role guard tetap berlaku).
+ * Tab "Pengaturan" (hasil pengelompokan menu dari Dashboard).
+ * Setiap pengguna (Admin maupun Kasir) memiliki akses ke Ganti Password Akun Saya dan Keluar.
+ * Menu administratif hanya aktif untuk Admin.
  */
 @Composable
 fun PengaturanHubScreen(
@@ -38,9 +41,11 @@ fun PengaturanHubScreen(
     onBukaBackup: () -> Unit,
     onBukaInfoPaket: () -> Unit,
     onLogout: () -> Unit,
-    viewModel: PengaturanHubViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    viewModel: PengaturanHubViewModel = hiltViewModel()
 ) {
     val paketAktif by viewModel.paketAktif.collectAsState()
+    var showDialogGantiPassword by remember { mutableStateOf(false) }
+    var pesanNotifikasi by remember { mutableStateOf<String?>(null) }
 
     val itemAdmin = buildList {
         add(ItemPengaturan("Pengaturan Printer", "Kelola printer thermal Bluetooth", Icons.Filled.Print, onBukaPengaturanPrinter))
@@ -64,15 +69,23 @@ fun PengaturanHubScreen(
         LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp)) {
             if (isAdmin) {
                 items(itemAdmin) { item -> BarisPengaturan(item) }
-            } else {
-                item {
-                    Text(
-                        "Fitur pengaturan hanya tersedia untuk Admin.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 24.dp)
+            }
+
+            item {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Keamanan Akun",
+                    style = MaterialTheme.typography.labelLarge.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+                BarisPengaturan(
+                    ItemPengaturan(
+                        judul = "Ganti Password Saya",
+                        subjudul = "Ubah kata sandi akun ${viewModel.currentUserName}",
+                        ikon = Icons.Filled.LockReset,
+                        onClick = { showDialogGantiPassword = true }
                     )
-                }
+                )
             }
 
             item { Spacer(Modifier.height(16.dp)) }
@@ -85,6 +98,103 @@ fun PengaturanHubScreen(
             item { Spacer(Modifier.height(24.dp)) }
         }
     }
+
+    if (showDialogGantiPassword) {
+        DialogGantiPasswordHub(
+            onDismiss = { showDialogGantiPassword = false },
+            onSimpan = { passLama, passBaru ->
+                viewModel.gantiPassword(passLama, passBaru) { res ->
+                    when (res) {
+                        is Result.Success -> pesanNotifikasi = "Password berhasil diperbarui. Silakan gunakan password baru ini pada login berikutnya."
+                        is Result.Failure -> pesanNotifikasi = res.error.pesan
+                    }
+                }
+                showDialogGantiPassword = false
+            }
+        )
+    }
+
+    pesanNotifikasi?.let { pesan ->
+        AlertDialog(
+            onDismissRequest = { pesanNotifikasi = null },
+            confirmButton = { TextButton(onClick = { pesanNotifikasi = null }) { Text("OK") } },
+            title = { Text("Pemberitahuan") },
+            text = { Text(pesan) }
+        )
+    }
+}
+
+@Composable
+private fun DialogGantiPasswordHub(
+    onDismiss: () -> Unit,
+    onSimpan: (String, String) -> Unit
+) {
+    var passwordLama by remember { mutableStateOf("") }
+    var passwordBaru by remember { mutableStateOf("") }
+    var konfirmasiPassword by remember { mutableStateOf("") }
+    var errorText by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ganti Password Akun") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = passwordLama,
+                    onValueChange = { passwordLama = it },
+                    label = { Text("Password Saat Ini") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = passwordBaru,
+                    onValueChange = { passwordBaru = it },
+                    label = { Text("Password Baru (min 6 karakter)") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = konfirmasiPassword,
+                    onValueChange = { konfirmasiPassword = it },
+                    label = { Text("Ulangi Password Baru") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                errorText?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (passwordLama.isBlank()) {
+                        errorText = "Password saat ini wajib diisi."
+                        return@TextButton
+                    }
+                    if (passwordBaru.length < 6) {
+                        errorText = "Password baru minimal 6 karakter."
+                        return@TextButton
+                    }
+                    if (passwordBaru != konfirmasiPassword) {
+                        errorText = "Konfirmasi password baru tidak cocok."
+                        return@TextButton
+                    }
+                    onSimpan(passwordLama, passwordBaru)
+                }
+            ) { Text("Perbarui") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
+    )
 }
 
 @Composable

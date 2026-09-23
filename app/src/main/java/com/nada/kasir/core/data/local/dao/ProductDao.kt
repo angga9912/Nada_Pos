@@ -25,6 +25,9 @@ interface ProductDao {
     @Query("SELECT COUNT(*) FROM products WHERE barcode = :barcode AND deletedAt IS NULL")
     suspend fun countByBarcode(barcode: String): Int
 
+    @Query("SELECT COUNT(*) FROM products WHERE barcode = :barcode AND id != :excludeId AND deletedAt IS NULL")
+    suspend fun countByBarcodeExcludingId(barcode: String, excludeId: Long): Int
+
     @Query("SELECT * FROM products WHERE stok <= stokMinimum AND stok > 0 AND isActive = 1 AND deletedAt IS NULL")
     fun observeStokMenipis(): Flow<List<ProductEntity>>
 

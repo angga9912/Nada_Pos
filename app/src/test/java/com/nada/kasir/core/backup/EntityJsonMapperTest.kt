@@ -2,11 +2,28 @@ package com.nada.kasir.core.backup
 
 import com.nada.kasir.core.data.local.entity.ProductEntity
 import com.nada.kasir.core.data.local.entity.StoreEntity
+import com.nada.kasir.core.data.local.entity.UserEntity
+import com.nada.kasir.core.data.local.entity.UserRole
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class EntityJsonMapperTest {
+
+    @Test
+    fun `user bisa di-roundtrip ke json dan kembali`() {
+        val user = UserEntity(
+            id = 1, nama = "Admin", username = "admin",
+            passwordHash = "PBKDF2:120000:salt:hash", role = UserRole.ADMIN, aktif = true
+        )
+        val json = EntityJsonMapper.userToJson(user)
+        val hasil = EntityJsonMapper.userFromJson(json)
+
+        assertEquals(user.nama, hasil.nama)
+        assertEquals(user.username, hasil.username)
+        assertEquals(user.passwordHash, hasil.passwordHash)
+        assertEquals(user.role, hasil.role)
+    }
 
     @Test
     fun `produk bisa di-roundtrip ke json dan kembali tanpa kehilangan data`() {
