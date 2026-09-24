@@ -8,11 +8,16 @@ import com.nada.kasir.core.data.local.entity.TransactionItemEntity
  * SAAT INI, bukan harga beli historis di waktu transaksi terjadi.
  */
 object KeuntunganCalculator {
-    fun hitungTotalKeuntungan(items: List<TransactionItemEntity>, hargaBeliPerProduk: Map<Long, Double>): Double {
-        return items.sumOf { item ->
+    fun hitungTotalKeuntungan(
+        items: List<TransactionItemEntity>,
+        hargaBeliPerProduk: Map<Long, Double>,
+        diskonTransaksiTambahan: Double = 0.0
+    ): Double {
+        val keuntunganItem = items.sumOf { item ->
             val hargaBeli = hargaBeliPerProduk[item.productId] ?: 0.0
             val keuntunganPerUnit = item.harga - hargaBeli
             (keuntunganPerUnit * item.qty) - item.diskon
         }
+        return maxOf(0.0, keuntunganItem - diskonTransaksiTambahan)
     }
 }

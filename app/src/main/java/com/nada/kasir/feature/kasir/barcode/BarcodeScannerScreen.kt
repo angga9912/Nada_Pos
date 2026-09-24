@@ -54,29 +54,46 @@ fun BarcodeScannerScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         if (hasCameraPermission) {
             var sudahDeteksi by remember { mutableStateOf(false) }
+            val executor = remember { Executors.newSingleThreadExecutor() }
+            val scanner = remember {
+                try {
+                    BarcodeScanning.getClient(
+                        BarcodeScannerOptions.Builder()
+                            .setBarcodeFormats(
+                                Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8,
+                                Barcode.FORMAT_CODE_128, Barcode.FORMAT_CODE_39,
+                                Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E, Barcode.FORMAT_QR_CODE
+                            ).build()
+                    )
+                } catch (t: Throwable) {
+                    null
+                }
+            }
+            var cameraProviderRef by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+
+            DisposableEffect(lifecycleOwner) {
+                onDispose {
+                    try { cameraProviderRef?.unbindAll() } catch (e: Exception) { /* abaikan */ }
+                    try { scanner?.close() } catch (e: Exception) { /* abaikan */ }
+                    try { executor.shutdown() } catch (e: Exception) { /* abaikan */ }
+                }
+            }
+
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
                     val previewView = PreviewView(ctx)
                     val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-                    val executor = Executors.newSingleThreadExecutor()
-                    val scanner = try {
-                        BarcodeScanning.getClient(
-                            BarcodeScannerOptions.Builder()
-                                .setBarcodeFormats(
-                                    Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8,
-                                    Barcode.FORMAT_CODE_128, Barcode.FORMAT_CODE_39,
-                                    Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E, Barcode.FORMAT_QR_CODE
-                                ).build()
-                        )
-                    } catch (t: Throwable) {
-                        previewView.post { pesanError = "Pemindai barcode gagal dimulai (${t.javaClass.simpleName})." }
+
+                    if (scanner == null) {
+                        previewView.post { pesanError = "Pemindai barcode gagal dimulai." }
                         return@AndroidView previewView
                     }
 
                     cameraProviderFuture.addListener({
                         try {
                             val cameraProvider = cameraProviderFuture.get()
+                            cameraProviderRef = cameraProvider
                             val preview = Preview.Builder().build().also {
                                 it.setSurfaceProvider(previewView.surfaceProvider)
                             }

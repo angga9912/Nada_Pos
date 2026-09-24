@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val KEY_PAKET_AKTIF = "paket_aktif"
 private const val KEY_LISENSI_KADALUARSA = "lisensi_kadaluarsa_millis" // "-1" berarti LIFETIME (tidak pernah expired)
 private const val KEY_LISENSI_KODE = "lisensi_kode_aktif"
 
@@ -55,11 +56,24 @@ class LicenseRepository @Inject constructor(
     }
 
     /**
-     * Dipanggil setiap aplikasi dibuka (poin langganan bulanan): kalau lisensi
-     * berbasis expiry sudah lewat, otomatis turunkan ke Basic. Lisensi LIFETIME
-     * (kadaluarsaMillis == -1) tidak pernah dicek/diturunkan.
+     * Dipanggil setiap aplikasi dibuka:
+     * 1. Re-verifikasi tanda tangan kriptografi kode lisensi aktif. Jika tier bukan BASIC
+     *    namun tanda tangan tidak valid atau kode di DB dimanipulasi, turunkan paksa ke BASIC.
+     * 2. Pengecekan kadaluarsa langganan bulanan.
      */
     suspend fun cekDanTurunkanJikaKadaluarsa() {
+        val paketAktif = settingDao.get(KEY_PAKET_AKTIF)
+        if (paketAktif != null && paketAktif != PaketAplikasi.BASIC.name) {
+            val kode = settingDao.get(KEY_LISENSI_KODE)
+            val hasilValidasi = if (!kode.isNullOrBlank()) LicenseKeyValidator.validasi(kode) else null
+            if (hasilValidasi == null || hasilValidasi.tier.name != paketAktif) {
+                // Lisensi tidak valid atau diutak-atik langsung di database -> turunkan ke Basic
+                paketRepository.setPaketAktif(PaketAplikasi.BASIC)
+                settingDao.upsert(SettingEntity(KEY_LISENSI_KADALUARSA, "0"))
+                return
+            }
+        }
+
         val kadaluarsaStr = settingDao.get(KEY_LISENSI_KADALUARSA) ?: return
         val kadaluarsa = kadaluarsaStr.toLongOrNull() ?: return
         if (kadaluarsa == -1L) return // lifetime, aman

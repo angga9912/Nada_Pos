@@ -83,19 +83,31 @@ class LaporanViewModel @Inject constructor(
 
     fun exportLaporanAktif() {
         viewModelScope.launch {
-            val (nama, laporan) = when (_uiState.value.tabAktif) {
-                TabLaporan.HARIAN -> "LAPORAN_HARIAN" to _uiState.value.laporanHarian
-                TabLaporan.BULANAN -> "LAPORAN_BULANAN" to _uiState.value.laporanBulanan
-                TabLaporan.STOK -> "LAPORAN_STOK" to null
-            }
-            if (laporan == null) return@launch
             val file = withContext(Dispatchers.IO) {
-                ExcelExporter(appContext).exportLaporan(
-                    nama, laporan.totalPenjualan, laporan.jumlahTransaksi,
-                    laporan.produkTerjual, laporan.totalDiskon, laporan.estimasiKeuntungan
-                )
+                when (_uiState.value.tabAktif) {
+                    TabLaporan.HARIAN -> {
+                        val laporan = _uiState.value.laporanHarian ?: return@withContext null
+                        ExcelExporter(appContext).exportLaporan(
+                            "LAPORAN_HARIAN", laporan.totalPenjualan, laporan.jumlahTransaksi,
+                            laporan.produkTerjual, laporan.totalDiskon, laporan.estimasiKeuntungan
+                        )
+                    }
+                    TabLaporan.BULANAN -> {
+                        val laporan = _uiState.value.laporanBulanan ?: return@withContext null
+                        ExcelExporter(appContext).exportLaporan(
+                            "LAPORAN_BULANAN", laporan.totalPenjualan, laporan.jumlahTransaksi,
+                            laporan.produkTerjual, laporan.totalDiskon, laporan.estimasiKeuntungan
+                        )
+                    }
+                    TabLaporan.STOK -> {
+                        val produkList = productRepository.observeActive().first()
+                        ExcelExporter(appContext).exportProduk(produkList) { "-" }
+                    }
+                }
             }
-            _uiState.value = _uiState.value.copy(fileExportTerakhir = file)
+            if (file != null) {
+                _uiState.value = _uiState.value.copy(fileExportTerakhir = file)
+            }
         }
     }
 }

@@ -6,7 +6,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddAPhoto
@@ -18,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
@@ -38,6 +42,7 @@ fun ProdukScreen(isAdmin: Boolean = true, viewModel: ProdukViewModel = hiltViewM
     val fileExportTerakhir by viewModel.fileExportTerakhir.collectAsState()
     var showForm by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<ProductEntity?>(null) }
+    var produkAkanDihapus by remember { mutableStateOf<ProductEntity?>(null) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
 
@@ -84,7 +89,7 @@ fun ProdukScreen(isAdmin: Boolean = true, viewModel: ProdukViewModel = hiltViewM
                             if (isAdmin) {
                                 Row {
                                     TextButton(onClick = { editing = produk; showForm = true }) { Text("Edit") }
-                                    TextButton(onClick = { viewModel.hapus(produk.id) }) { Text("Hapus") }
+                                    TextButton(onClick = { produkAkanDihapus = produk }) { Text("Hapus") }
                                 }
                             }
                         }
@@ -102,6 +107,25 @@ fun ProdukScreen(isAdmin: Boolean = true, viewModel: ProdukViewModel = hiltViewM
             onSimpan = { produk ->
                 viewModel.simpan(produk) { pesan -> errorMsg = pesan }
                 showForm = false
+            }
+        )
+    }
+
+    produkAkanDihapus?.let { produk ->
+        AlertDialog(
+            onDismissRequest = { produkAkanDihapus = null },
+            title = { Text("Hapus Produk") },
+            text = { Text("Apakah Anda yakin ingin menghapus '${produk.nama}'?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.hapus(produk.id)
+                        produkAkanDihapus = null
+                    }
+                ) { Text("Hapus", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { produkAkanDihapus = null }) { Text("Batal") }
             }
         )
     }
@@ -148,6 +172,7 @@ internal fun ProdukFormDialog(
     var stok by remember { mutableStateOf(initial?.stok?.toString() ?: "0") }
     var stokMin by remember { mutableStateOf(initial?.stokMinimum?.toString() ?: "5") }
     var fotoPath by remember { mutableStateOf(initial?.fotoPath) }
+    var errorValidasi by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -164,31 +189,71 @@ internal fun ProdukFormDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initial == null) "Tambah Produk" else "Edit Produk") },
         text = {
-            Column {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 FotoProdukPicker(fotoPath = fotoPath, onPilihFoto = { pilihFoto.launch("image/*") })
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(kode, { kode = it }, label = { Text("Kode Produk") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(barcode, { barcode = it }, label = { Text("Barcode") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(nama, { nama = it }, label = { Text("Nama Produk") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(hargaBeli, { hargaBeli = it }, label = { Text("Harga Beli") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(hargaJual, { hargaJual = it }, label = { Text("Harga Jual") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(stok, { stok = it }, label = { Text("Stok") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(stokMin, { stokMin = it }, label = { Text("Stok Minimum") }, modifier = Modifier.fillMaxWidth())
+                errorValidasi?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(4.dp))
+                }
+                OutlinedTextField(kode, { kode = it; errorValidasi = null }, label = { Text("Kode Produk *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(barcode, { barcode = it }, label = { Text("Barcode") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(nama, { nama = it; errorValidasi = null }, label = { Text("Nama Produk *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    hargaBeli, { hargaBeli = it },
+                    label = { Text("Harga Beli") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    hargaJual, { hargaJual = it },
+                    label = { Text("Harga Jual") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    stok, { stok = it },
+                    label = { Text("Stok") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    stokMin, { stokMin = it },
+                    label = { Text("Stok Minimum") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
             TextButton(onClick = {
+                if (kode.trim().isBlank()) {
+                    errorValidasi = "Kode produk tidak boleh kosong."
+                    return@TextButton
+                }
+                if (nama.trim().isBlank()) {
+                    errorValidasi = "Nama produk tidak boleh kosong."
+                    return@TextButton
+                }
+                val hBeli = maxOf(0.0, hargaBeli.toDoubleOrNull() ?: 0.0)
+                val hJual = maxOf(0.0, hargaJual.toDoubleOrNull() ?: 0.0)
+                val s = maxOf(0, stok.toIntOrNull() ?: 0)
+                val sMin = maxOf(0, stokMin.toIntOrNull() ?: 5)
                 onSimpan(
                     ProductEntity(
                         id = initial?.id ?: 0,
-                        kodeProduk = kode,
-                        barcode = barcode.ifBlank { null },
-                        nama = nama,
+                        kodeProduk = kode.trim(),
+                        barcode = barcode.trim().ifBlank { null },
+                        nama = nama.trim(),
                         categoryId = initial?.categoryId,
-                        hargaBeli = hargaBeli.toDoubleOrNull() ?: 0.0,
-                        hargaJual = hargaJual.toDoubleOrNull() ?: 0.0,
-                        stok = stok.toIntOrNull() ?: 0,
-                        stokMinimum = stokMin.toIntOrNull() ?: 5,
+                        hargaBeli = hBeli,
+                        hargaJual = hJual,
+                        stok = s,
+                        stokMinimum = sMin,
                         fotoPath = fotoPath
                     )
                 )

@@ -143,6 +143,10 @@ object LicenseKeyValidator {
             isLenient = false
             timeZone = TimeZone.getTimeZone("UTC")
         }
-        return runCatching { format.parse(expiry)?.time }.getOrNull()
+        return runCatching {
+            val date = format.parse(expiry) ?: return@runCatching null
+            // Berlaku hingga akhir hari tanggal tersebut (23:59:59.999 UTC)
+            date.time + (24 * 60 * 60 * 1000L - 1)
+        }.getOrNull()
     }
 }

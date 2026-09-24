@@ -4,6 +4,10 @@ import android.content.Context
 import androidx.room.withTransaction
 import com.nada.kasir.core.data.local.AppDatabase
 import com.nada.kasir.core.data.local.dao.*
+import com.nada.kasir.core.data.local.entity.SettingEntity
+import com.nada.kasir.core.data.local.entity.UserRole
+import com.nada.kasir.core.lisensi.LicenseKeyValidator
+import com.nada.kasir.core.paket.PaketAplikasi
 import com.nada.kasir.core.util.AppError
 import com.nada.kasir.core.util.Result
 import kotlinx.coroutines.Dispatchers
@@ -11,23 +15,21 @@ import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
+import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.*
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val BACKUP_VERSION = 1
+private const val BACKUP_VERSION = 2
+private const val HMAC_KEY_STRING = "NADA-POS-SECURE-BACKUP-INTEGRITY-2026"
 
 /**
  * BACKUP DATA / RESTORE DATA (poin 17).
- * Mencakup: Produk, Stok, Transaksi, Pengaturan Toko, Pengguna, Printer.
- *
- * Aturan penting: restore TIDAK BOLEH menghapus data lama sebelum data baru
- * terbukti valid dan berhasil disisipkan. Caranya di sini:
- *   1. Parse & validasi seluruh JSON dulu di luar transaksi DB (fail fast kalau rusak).
- *   2. Baru setelah semua data baru siap di memori, hapus tabel lama DAN insert data
- *      baru dibungkus SATU appDatabase.withTransaction { } - kalau ada error di
- *      tengah jalan, Room otomatis rollback dan data lama tetap utuh.
+ * Dilengkapi pengecekan integritas HMAC-SHA256 untuk mendeteksi manipulasi data
+ * di luar aplikasi, serta sanitasi paket lisensi saat pemulihan data.
  */
 @Singleton
 class BackupManager @Inject constructor(
@@ -40,7 +42,8 @@ class BackupManager @Inject constructor(
     private val transactionDao: TransactionDao,
     private val stockMovementDao: StockMovementDao,
     private val printerDao: PrinterDao,
-    private val settingDao: SettingDao
+    private val settingDao: SettingDao,
+    private val auditLogDao: AuditLogDao
 ) {
     fun folderBackup(): File {
         val dir = File(context.getExternalFilesDir(null), "backup")
@@ -52,19 +55,36 @@ class BackupManager @Inject constructor(
         try {
             val root = JSONObject()
             root.put("versiBackup", BACKUP_VERSION)
-            root.put("dibuatPada", System.currentTimeMillis())
-            root.put("stores", EntityJsonMapper.listToJsonArray(storeDao.getAllForBackup(), EntityJsonMapper::storeToJson))
-            root.put("users", EntityJsonMapper.listToJsonArray(userDao.getAllForBackup(), EntityJsonMapper::userToJson))
-            root.put("categories", EntityJsonMapper.listToJsonArray(categoryDao.getAllForBackup(), EntityJsonMapper::categoryToJson))
-            root.put("products", EntityJsonMapper.listToJsonArray(productDao.getAllForBackup(), EntityJsonMapper::productToJson))
-            root.put("transactions", EntityJsonMapper.listToJsonArray(transactionDao.getAllTransactionsForBackup(), EntityJsonMapper::transactionToJson))
-            root.put("transactionItems", EntityJsonMapper.listToJsonArray(transactionDao.getAllItemsForBackup(), EntityJsonMapper::itemToJson))
-            root.put("payments", EntityJsonMapper.listToJsonArray(transactionDao.getAllPaymentsForBackup(), EntityJsonMapper::paymentToJson))
-            root.put("stockMovements", EntityJsonMapper.listToJsonArray(stockMovementDao.getAllForBackup(), EntityJsonMapper::stockMovementToJson))
-            root.put("printers", EntityJsonMapper.listToJsonArray(printerDao.getAllForBackup(), EntityJsonMapper::printerToJson))
-            root.put("settings", EntityJsonMapper.listToJsonArray(settingDao.getAllForBackup(), EntityJsonMapper::settingToJson))
+            val dibuatPada = System.currentTimeMillis()
+            root.put("dibuatPada", dibuatPada)
 
-            val namaFile = "nada-kasir-backup-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale("id","ID")).format(Date())}.json"
+            val storesArr = EntityJsonMapper.listToJsonArray(storeDao.getAllForBackup(), EntityJsonMapper::storeToJson)
+            val usersArr = EntityJsonMapper.listToJsonArray(userDao.getAllForBackup(), EntityJsonMapper::userToJson)
+            val categoriesArr = EntityJsonMapper.listToJsonArray(categoryDao.getAllForBackup(), EntityJsonMapper::categoryToJson)
+            val productsArr = EntityJsonMapper.listToJsonArray(productDao.getAllForBackup(), EntityJsonMapper::productToJson)
+            val transactionsArr = EntityJsonMapper.listToJsonArray(transactionDao.getAllTransactionsForBackup(), EntityJsonMapper::transactionToJson)
+            val transactionItemsArr = EntityJsonMapper.listToJsonArray(transactionDao.getAllItemsForBackup(), EntityJsonMapper::itemToJson)
+            val paymentsArr = EntityJsonMapper.listToJsonArray(transactionDao.getAllPaymentsForBackup(), EntityJsonMapper::paymentToJson)
+            val stockMovementsArr = EntityJsonMapper.listToJsonArray(stockMovementDao.getAllForBackup(), EntityJsonMapper::stockMovementToJson)
+            val printersArr = EntityJsonMapper.listToJsonArray(printerDao.getAllForBackup(), EntityJsonMapper::printerToJson)
+            val settingsArr = EntityJsonMapper.listToJsonArray(settingDao.getAllForBackup(), EntityJsonMapper::settingToJson)
+
+            root.put("stores", storesArr)
+            root.put("users", usersArr)
+            root.put("categories", categoriesArr)
+            root.put("products", productsArr)
+            root.put("transactions", transactionsArr)
+            root.put("transactionItems", transactionItemsArr)
+            root.put("payments", paymentsArr)
+            root.put("stockMovements", stockMovementsArr)
+            root.put("printers", printersArr)
+            root.put("settings", settingsArr)
+
+            // Hitung HMAC integritas untuk melindungi file dari tampering
+            val hmac = hitungHmacPayload(root)
+            root.put("integritasHmac", hmac)
+
+            val namaFile = "nada-kasir-backup-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale("id","ID")).format(Date(dibuatPada))}.json"
             val file = File(folderBackup(), namaFile)
             file.writeText(root.toString(2))
             Result.Success(file)
@@ -83,13 +103,42 @@ class BackupManager @Inject constructor(
             return@withContext Result.Failure(AppError.FormatExcelSalah)
         }
 
+        // Verifikasi integritas HMAC jika file memiliki signature integritas
+        if (root.has("integritasHmac")) {
+            val expectedHmac = root.getString("integritasHmac")
+            val calculatedHmac = hitungHmacPayload(root)
+            if (!MessageDigest.isEqual(expectedHmac.toByteArray(Charsets.UTF_8), calculatedHmac.toByteArray(Charsets.UTF_8))) {
+                return@withContext Result.Failure(AppError.Lainnya("File backup tidak valid atau telah dimodifikasi di luar aplikasi."))
+            }
+        }
+
         val stores = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("stores"), EntityJsonMapper::storeFromJson) } catch (e: Exception) { emptyList() }
-        val users = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("users"), EntityJsonMapper::userFromJson) } catch (e: Exception) { emptyList() }
+        val rawUsers = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("users"), EntityJsonMapper::userFromJson) } catch (e: Exception) { emptyList() }
         val categories = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("categories"), EntityJsonMapper::categoryFromJson) } catch (e: Exception) { emptyList() }
         val products = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("products"), EntityJsonMapper::productFromJson) } catch (e: Exception) { emptyList() }
         val printers = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("printers"), EntityJsonMapper::printerFromJson) } catch (e: Exception) { emptyList() }
-        val settings = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("settings"), EntityJsonMapper::settingFromJson) } catch (e: Exception) { emptyList() }
+        val rawSettings = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("settings"), EntityJsonMapper::settingFromJson) } catch (e: Exception) { emptyList() }
         val stockMovements = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("stockMovements"), EntityJsonMapper::stockMovementFromJson) } catch (e: Exception) { emptyList() }
+
+        // Sanitasi Pengaturan Lisensi: Jangan izinkan PRO/CUSTOM di-restore tanpa kode lisensi ECDSA sah
+        val sanitizedSettings = rawSettings.toMutableList()
+        val restoredPaket = sanitizedSettings.firstOrNull { it.key == "paket_aktif" }?.value
+        val restoredKode = sanitizedSettings.firstOrNull { it.key == "lisensi_kode_aktif" }?.value
+        if (restoredPaket != null && restoredPaket != PaketAplikasi.BASIC.name) {
+            val valid = restoredKode != null && LicenseKeyValidator.validasi(restoredKode)?.tier?.name == restoredPaket
+            if (!valid) {
+                // Kode lisensi tidak valid -> turunkan paksa paket ke BASIC
+                sanitizedSettings.removeAll { it.key == "paket_aktif" }
+                sanitizedSettings.add(SettingEntity(key = "paket_aktif", value = PaketAplikasi.BASIC.name))
+            }
+        }
+
+        // Sanitasi Pengguna: Pastikan tidak ada akun dengan password kosong dan minimal ada 1 Admin
+        val users = rawUsers.filter { it.passwordHash.isNotBlank() }
+        val adaAdmin = users.any { it.role == UserRole.ADMIN }
+        if (users.isNotEmpty() && !adaAdmin) {
+            return@withContext Result.Failure(AppError.Lainnya("File backup tidak valid: tidak ditemukan akun Administrator."))
+        }
 
         // Transaksi butuh pemetaan ID lama -> ID baru supaya item & payment tetap terhubung ke induknya
         val transaksiJsonArray = try { root.getJSONArray("transactions") } catch (e: Exception) { null }
@@ -98,10 +147,9 @@ class BackupManager @Inject constructor(
 
         return@withContext try {
             appDatabase.withTransaction {
-                // Tahap 2: baru sekarang data lama dihapus - kalau exception terjadi di titik manapun
-                // setelah ini, Room me-rollback SEMUANYA (termasuk DELETE-nya), jadi data lama tetap ada.
+                // Tahap 2: baru sekarang data lama dihapus
                 storeDao.clearAll(); userDao.clearAll(); categoryDao.clearAll(); productDao.clearAll()
-                printerDao.clearAll(); settingDao.clearAll(); stockMovementDao.clearAll()
+                printerDao.clearAll(); settingDao.clearAll(); stockMovementDao.clearAll(); auditLogDao.clearAll()
                 transactionDao.clearPayments(); transactionDao.clearItems(); transactionDao.clearTransactions()
 
                 if (stores.isNotEmpty()) storeDao.insertAll(stores)
@@ -109,7 +157,7 @@ class BackupManager @Inject constructor(
                 if (categories.isNotEmpty()) categoryDao.insertAll(categories)
                 if (products.isNotEmpty()) productDao.insertAll(products)
                 if (printers.isNotEmpty()) printerDao.insertAll(printers)
-                settings.forEach { settingDao.upsert(it) }
+                sanitizedSettings.forEach { settingDao.upsert(it) }
                 if (stockMovements.isNotEmpty()) stockMovementDao.insertAll(stockMovements)
 
                 if (transaksiJsonArray != null) {
@@ -143,8 +191,24 @@ class BackupManager @Inject constructor(
             }
             Result.Success(Unit)
         } catch (e: Exception) {
-            // Room sudah rollback otomatis - data lama tetap seperti sebelum restore dicoba.
             Result.Failure(AppError.TransaksiGagalDisimpan)
         }
+    }
+
+    private fun hitungHmacPayload(root: JSONObject): String {
+        val mac = Mac.getInstance("HmacSHA256")
+        val secretKey = SecretKeySpec(HMAC_KEY_STRING.toByteArray(Charsets.UTF_8), "HmacSHA256")
+        mac.init(secretKey)
+
+        val builder = StringBuilder()
+        builder.append(root.optLong("dibuatPada"))
+        builder.append(root.optJSONArray("stores")?.toString() ?: "")
+        builder.append(root.optJSONArray("users")?.toString() ?: "")
+        builder.append(root.optJSONArray("products")?.toString() ?: "")
+        builder.append(root.optJSONArray("transactions")?.toString() ?: "")
+        builder.append(root.optJSONArray("settings")?.toString() ?: "")
+
+        val signatureBytes = mac.doFinal(builder.toString().toByteArray(Charsets.UTF_8))
+        return Base64.getEncoder().encodeToString(signatureBytes)
     }
 }

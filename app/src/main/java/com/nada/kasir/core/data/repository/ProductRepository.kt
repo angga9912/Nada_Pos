@@ -27,10 +27,11 @@ class ProductRepository @Inject constructor(
     suspend fun cariByBarcode(barcode: String): ProductEntity? = productDao.findByBarcode(barcode)
 
     suspend fun simpan(product: ProductEntity): Result<Long> {
-        // Barcode tidak boleh duplikat (poin 5)
-        if (!product.barcode.isNullOrBlank()) {
-            val jumlah = productDao.countByBarcode(product.barcode)
-            if (jumlah > 0 && product.id == 0L) {
+        // Barcode tidak boleh duplikat (poin 5), baik saat tambah baru maupun edit produk lama
+        val barcode = product.barcode
+        if (!barcode.isNullOrBlank()) {
+            val duplikat = productDao.countByBarcodeExcludingId(barcode, product.id)
+            if (duplikat > 0) {
                 return Result.Failure(AppError.BarcodeDuplikat)
             }
         }
@@ -63,18 +64,26 @@ class ProductRepository @Inject constructor(
 
         appDatabase.withTransaction {
             baris.forEach { b ->
-                val sudahAda = !b.barcode.isNullOrBlank() && productDao.countByBarcode(b.barcode) > 0
-                if (sudahAda) {
-                    dilewati.add("${b.kodeProduk} (barcode sudah terdaftar)")
-                } else {
-                    productDao.insert(
-                        ProductEntity(
-                            kodeProduk = b.kodeProduk, barcode = b.barcode, nama = b.nama,
-                            categoryId = null, hargaBeli = b.hargaBeli, hargaJual = b.hargaJual,
-                            stok = b.stok, stokMinimum = 5
+                val kodeSudahAda = productDao.countByKodeProduk(b.kodeProduk) > 0
+                val barcodeSudahAda = !b.barcode.isNullOrBlank() && productDao.countByBarcodeAll(b.barcode) > 0
+
+                when {
+                    kodeSudahAda -> {
+                        dilewati.add("${b.kodeProduk} (kode produk sudah terdaftar)")
+                    }
+                    barcodeSudahAda -> {
+                        dilewati.add("${b.kodeProduk} (barcode sudah terdaftar)")
+                    }
+                    else -> {
+                        productDao.insert(
+                            ProductEntity(
+                                kodeProduk = b.kodeProduk, barcode = b.barcode, nama = b.nama,
+                                categoryId = null, hargaBeli = b.hargaBeli, hargaJual = b.hargaJual,
+                                stok = b.stok, stokMinimum = 5
+                            )
                         )
-                    )
-                    jumlahBerhasil++
+                        jumlahBerhasil++
+                    }
                 }
             }
         }
