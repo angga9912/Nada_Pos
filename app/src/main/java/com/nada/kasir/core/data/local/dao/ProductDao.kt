@@ -16,6 +16,18 @@ interface ProductDao {
     """)
     fun search(query: String): Flow<List<ProductEntity>>
 
+    // Dipakai layar Kasir: gabungan filter kategori (chip) + pencarian teks sekaligus,
+    // supaya kasir bisa pilih kategori DAN mengetik cari di saat bersamaan.
+    // :categoryId null -> semua kategori. :query kosong -> tidak difilter nama/kode.
+    @Query("""
+        SELECT * FROM products
+        WHERE isActive = 1 AND deletedAt IS NULL
+        AND (:categoryId IS NULL OR categoryId = :categoryId)
+        AND (:query = '' OR nama LIKE '%' || :query || '%' OR kodeProduk LIKE '%' || :query || '%')
+        ORDER BY nama ASC
+    """)
+    fun observeFiltered(categoryId: Long?, query: String): Flow<List<ProductEntity>>
+
     @Query("SELECT * FROM products WHERE barcode = :barcode AND deletedAt IS NULL LIMIT 1")
     suspend fun findByBarcode(barcode: String): ProductEntity?
 
