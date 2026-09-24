@@ -1,42 +1,38 @@
 package com.nada.kasir.feature.kasir
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.nada.kasir.core.data.local.entity.MetodePembayaran
-import com.nada.kasir.core.data.local.entity.ProductEntity
-import com.nada.kasir.core.domain.model.KeranjangItem
 import com.nada.kasir.core.util.BeepPlayer
 import com.nada.kasir.core.util.CurrencyFormatter
 import com.nada.kasir.core.util.HandheldScannerDetector
@@ -44,42 +40,35 @@ import com.nada.kasir.feature.kasir.barcode.BarcodeScannerScreen
 import com.nada.kasir.feature.produk.ProdukFormDialog
 import com.nada.kasir.feature.struk.StrukPreviewDialog
 
-// Brand Color Palette NADA POS
-private val NadaBlue = Color(0xFF1976D2)
-private val NadaBlueDark = Color(0xFF0D47A1)
-private val NadaBlueLight = Color(0xFFE3F2FD)
-private val NadaBackground = Color(0xFFF8FAFC)
-private val NadaSurface = Color.White
-private val NadaTextDark = Color(0xFF0F172A)
-private val NadaTextMuted = Color(0xFF64748B)
-private val NadaBorder = Color(0xFFE2E8F0)
-private val NadaSuccess = Color(0xFF16A34A)
-private val NadaSuccessLight = Color(0xFFDCFCE7)
-private val NadaWarning = Color(0xFFD97706)
-private val NadaWarningLight = Color(0xFFFEF3C7)
-
 /**
- * Halaman Utama Kasir NADA POS.
- * High-fidelity, touch-friendly, mobile-first retail cashier interface.
- * Alur interaksi utama: SCAN -> ADD -> REVIEW -> PAY.
+ * Halaman Kasir - fitur utama aplikasi (poin 4).
+ * Layout mobile-first: grid produk full-width di atas, keranjang + ringkasan +
+ * tombol BAYAR SELALU terbuka langsung di bagian bawah layar begitu ada item
+ * (bukan lagi bar ringkas yang perlu disentuh dulu untuk dibuka) - sesuai revisi
+ * desain mockup, supaya kasir bisa langsung lihat & revisi pesanan tanpa ekstra
+ * ketukan. Nama produk & qty tetap jelas terbaca karena daftar keranjang punya
+ * baris lebarnya sendiri (bukan kolom sempit berbagi dengan grid).
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KasirScreen(
     currentUserId: Long,
     isAdmin: Boolean = false,
+    namaPengguna: String = "Kasir",
     viewModel: KasirViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
     var showPembayaranDialog by remember { mutableStateOf(false) }
     var showBarcodeScanner by remember { mutableStateOf(false) }
+    var tampilFormProdukBaru by remember { mutableStateOf(false) }
+    // State quick action "+ Diskon" & "+ Pelanggan" di keranjang (poin desain mockup).
+    // Nama pembeli disimpan di layar ini (bukan ViewModel) supaya bisa langsung mengisi
+    // dialog Pembayaran tanpa kasir mengetik ulang - baru benar-benar disimpan ke transaksi
+    // saat viewModel.bayar() dipanggil, alur data pembayaran tidak berubah sama sekali.
     var showDiskonDialog by remember { mutableStateOf(false) }
     var showPelangganDialog by remember { mutableStateOf(false) }
-    var showCatatanDialog by remember { mutableStateOf(false) }
-    var showMenuLainnya by remember { mutableStateOf(false) }
-    var tampilFormProdukBaru by remember { mutableStateOf(false) }
+    var namaPembeliDicatat by remember { mutableStateOf("") }
 
-    // Buffer deteksi barcode scanner fisik (handheld)
+    // Buffer untuk membedakan ketikan scanner fisik (handheld) vs ketikan manual kasir (poin 5, Phase 2)
     val handheldDetector = remember {
         HandheldScannerDetector(onBarcodeTerdeteksi = { kode ->
             BeepPlayer.beep()
@@ -103,9 +92,12 @@ fun KasirScreen(
     if (state.transaksiBerhasilId != null) {
         TransaksiBerhasilDialog(
             nomorAntrian = state.nomorAntrianBerhasil,
-            onTransaksiBaru = { viewModel.mulaiTransaksiBaru() },
+            onTransaksiBaru = {
+                viewModel.mulaiTransaksiBaru()
+                namaPembeliDicatat = ""
+            },
             onCetak = { viewModel.tampilkanPreviewStruk(state.transaksiBerhasilId!!) },
-            onBagikan = { /* Share struk */ }
+            onBagikan = { /* TODO Phase 3: share struk via FileProvider */ }
         )
         state.previewStruk?.let { teks ->
             StrukPreviewDialog(
@@ -118,7 +110,7 @@ fun KasirScreen(
         return
     }
 
-    // Barcode baru belum terdaftar
+    // Barcode terbaca tapi belum ada di data produk -> tawarkan tambah produk baru
     state.barcodeBelumTerdaftar?.let { kode ->
         if (isAdmin && tampilFormProdukBaru) {
             ProdukFormDialog(
@@ -136,13 +128,10 @@ fun KasirScreen(
         } else if (isAdmin) {
             AlertDialog(
                 onDismissRequest = { viewModel.tutupBarcodeBelumTerdaftar() },
-                title = { Text("Produk belum terdaftar", fontWeight = FontWeight.Bold) },
+                title = { Text("Produk belum terdaftar") },
                 text = { Text("Barcode $kode belum ada di data produk. Tambahkan sebagai produk baru?") },
                 confirmButton = {
-                    Button(
-                        onClick = { tampilFormProdukBaru = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = NadaBlue)
-                    ) { Text("Tambah Produk Baru") }
+                    TextButton(onClick = { tampilFormProdukBaru = true }) { Text("Tambah Produk Baru") }
                 },
                 dismissButton = {
                     TextButton(onClick = { viewModel.tutupBarcodeBelumTerdaftar() }) { Text("Batal") }
@@ -151,13 +140,10 @@ fun KasirScreen(
         } else {
             AlertDialog(
                 onDismissRequest = { viewModel.tutupBarcodeBelumTerdaftar() },
-                title = { Text("Produk belum terdaftar", fontWeight = FontWeight.Bold) },
+                title = { Text("Produk belum terdaftar") },
                 text = { Text("Barcode $kode belum ada di data produk. Minta admin untuk menambahkannya.") },
                 confirmButton = {
-                    Button(
-                        onClick = { viewModel.tutupBarcodeBelumTerdaftar() },
-                        colors = ButtonDefaults.buttonColors(containerColor = NadaBlue)
-                    ) { Text("OK") }
+                    TextButton(onClick = { viewModel.tutupBarcodeBelumTerdaftar() }) { Text("OK") }
                 }
             )
         }
@@ -166,13 +152,8 @@ fun KasirScreen(
     state.errorPesan?.let { pesan ->
         AlertDialog(
             onDismissRequest = { viewModel.clearError() },
-            confirmButton = {
-                Button(
-                    onClick = { viewModel.clearError() },
-                    colors = ButtonDefaults.buttonColors(containerColor = NadaBlue)
-                ) { Text("OK") }
-            },
-            title = { Text("Perhatian", fontWeight = FontWeight.Bold) },
+            confirmButton = { TextButton(onClick = { viewModel.clearError() }) { Text("OK") } },
+            title = { Text("Perhatian") },
             text = { Text(pesan) }
         )
     }
@@ -181,212 +162,130 @@ fun KasirScreen(
         state.keranjang.firstOrNull { it.productId == productId }?.qty ?: 0
     }
 
-    val defaultKategori = listOf("Semua", "Minuman", "Makanan", "Snack", "Sembako", "Lainnya")
-    val daftarKategoriNama = remember(state.kategoriList) {
-        val list = mutableListOf("Semua")
-        if (state.kategoriList.isNotEmpty()) {
-            list.addAll(state.kategoriList.map { it.nama })
-        } else {
-            list.addAll(listOf("Minuman", "Makanan", "Snack", "Sembako", "Lainnya"))
-        }
-        list.distinct()
-    }
-
-    Scaffold(
-        containerColor = NadaBackground,
-        topBar = {
-            KasirTopBar(
-                namaToko = state.store?.nama ?: "Toko Kita",
-                kasirNama = state.cashierName,
-                isPrinterReady = state.printerTersedia
-            )
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            // 1. SEARCH + CAMERA SCAN BAR
-            SearchScanSection(
-                query = state.query,
-                onQueryChange = { teksBaru ->
-                    if (teksBaru.length > state.query.length) {
-                        val karakterBaru = teksBaru.last()
-                        if (karakterBaru == '\n') {
-                            handheldDetector.onEnterOrNewline()
-                            return@SearchScanSection
-                        } else {
-                            handheldDetector.onCharTyped(karakterBaru)
+    Column(modifier = Modifier.fillMaxSize()) {
+        HeaderKasir(
+            namaToko = state.store?.nama ?: "NADA POS",
+            logoPath = state.store?.logoPath,
+            namaPengguna = namaPengguna
+        )
+        // Area produk - full width, tidak lagi berbagi lebar dengan panel keranjang
+        Column(modifier = Modifier.weight(1f).padding(12.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                OutlinedTextField(
+                    value = state.query,
+                    onValueChange = { teksBaru ->
+                        // Deteksi karakter baru yang masuk untuk mengenali pola ketikan scanner fisik.
+                        if (teksBaru.length > state.query.length) {
+                            val karakterBaru = teksBaru.last()
+                            if (karakterBaru == '\n') {
+                                handheldDetector.onEnterOrNewline()
+                                return@OutlinedTextField
+                            } else {
+                                handheldDetector.onCharTyped(karakterBaru)
+                            }
                         }
-                    }
-                    viewModel.onQueryChange(teksBaru)
-                },
-                onScanClick = { showBarcodeScanner = true }
-            )
-
-            // 2. HORIZONTAL CATEGORY CHIPS
-            CategoryChipsSection(
-                categories = daftarKategoriNama,
-                selectedCategory = state.kategoriTerpilihNama,
-                onCategorySelect = { kategori ->
-                    val matching = state.kategoriList.firstOrNull { it.nama.equals(kategori, ignoreCase = true) }
-                    viewModel.pilihKategori(matching?.id, kategori)
-                }
-            )
-
-            // 3. PRODUCT GRID (2 COLUMNS)
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-            ) {
-                if (state.produk.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(24.dp)
-                        ) {
-                            Icon(
-                                Icons.Filled.Inventory2,
-                                contentDescription = null,
-                                modifier = Modifier.size(56.dp),
-                                tint = NadaTextMuted.copy(alpha = 0.5f)
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                if (state.query.isNotBlank()) "Produk tidak ditemukan" else "Belum ada produk",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = NadaTextDark
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "Scan barcode atau cari nama produk lain",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = NadaTextMuted
-                            )
-                        }
-                    }
-                } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(state.produk, key = { it.id }) { produk ->
-                            ProductCard(
-                                produk = produk,
-                                qtyDiKeranjang = jumlahDiKeranjang(produk.id),
-                                onTambah = {
-                                    BeepPlayer.beep()
-                                    viewModel.tambahKeKeranjang(produk)
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-
-            // 4. CART & CHECKOUT PANEL (STICKY BOTTOM)
-            if (state.keranjang.isNotEmpty()) {
-                CartBottomPanel(
-                    keranjang = state.keranjang,
-                    subtotal = state.subtotal,
-                    diskonTotal = state.diskonTotal,
-                    total = state.total,
-                    namaPelanggan = state.namaPelanggan,
-                    catatan = state.catatanTransaksi,
-                    onUbahQty = viewModel::ubahQty,
-                    onHapusItem = viewModel::hapusItemKeranjang,
-                    onBukaDiskon = { showDiskonDialog = true },
-                    onBukaPelanggan = { showPelangganDialog = true },
-                    onBukaCatatan = { showCatatanDialog = true },
-                    onMenuLainnya = { showMenuLainnya = true },
-                    onBayar = { showPembayaranDialog = true }
+                        viewModel.onQueryChange(teksBaru)
+                    },
+                    placeholder = { Text("Cari produk atau scan barcode") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.weight(1f)
                 )
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = { showBarcodeScanner = true },
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp),
+                    modifier = Modifier.height(56.dp)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = "Scan barcode dengan kamera", modifier = Modifier.size(18.dp))
+                        Text("Scan", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+            Text(
+                "Scan barcode menggunakan kamera HP",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+            )
+            Spacer(Modifier.height(10.dp))
+            CategoryChipsRow(
+                kategori = state.kategori,
+                kategoriTerpilih = state.kategoriTerpilih,
+                onPilih = viewModel::pilihKategori
+            )
+            Spacer(Modifier.height(8.dp))
+            LazyVerticalGrid(
+                // Adaptive = jumlah kolom menyesuaikan sendiri lebar layar (HP kecil, HP besar,
+                // atau tablet) - kartu diusahakan sekitar 108dp, minimal 96dp di layar tersempit.
+                columns = GridCells.Adaptive(minSize = 108.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = 4.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                items(state.produk, key = { it.id }) { produk ->
+                    ProdukKasirCard(
+                        nama = produk.nama,
+                        harga = produk.hargaJual,
+                        stok = produk.stok,
+                        fotoPath = produk.fotoPath,
+                        jumlahDiKeranjang = jumlahDiKeranjang(produk.id),
+                        onClick = { viewModel.tambahKeKeranjang(produk) }
+                    )
+                }
             }
         }
+
+        // Panel keranjang - SELALU terbuka & menempel di bagian bawah layar utama, tidak lagi
+        // modal bottom sheet yang perlu disentuh dulu untuk dibuka (revisi sesuai desain mockup
+        // terbaru: keranjang + ringkasan + tombol BAYAR langsung terlihat di layar Kasir).
+        // Tinggi mengecil otomatis saat kosong ("empty cart state yang informatif" di desain
+        // mockup) supaya grid produk di atas tetap dapat ruang paling luas.
+        KeranjangPanel(
+            keranjang = state.keranjang,
+            subtotal = state.subtotal,
+            diskonTotal = state.diskonTotal,
+            total = state.total,
+            namaPembeli = namaPembeliDicatat,
+            isProsesBayar = state.isProsesBayar,
+            onUbahQty = viewModel::ubahQty,
+            onHapusItem = { productId -> viewModel.ubahQty(productId, 0) },
+            onDiskonClick = { showDiskonDialog = true },
+            onPelangganClick = { showPelangganDialog = true },
+            onBayar = { showPembayaranDialog = true }
+        )
     }
 
-    // Dialog Tambah Diskon
     if (showDiskonDialog) {
         DiskonDialog(
             diskonAwal = state.diskonTotal,
-            subtotal = state.subtotal,
             onDismiss = { showDiskonDialog = false },
-            onTerapkan = { nominal ->
-                viewModel.setDiskonTotal(nominal)
+            onSimpan = { nilai ->
+                viewModel.setDiskonTotal(nilai)
                 showDiskonDialog = false
             }
         )
     }
 
-    // Dialog Nama Pelanggan
     if (showPelangganDialog) {
         PelangganDialog(
-            namaAwal = state.namaPelanggan,
+            namaAwal = namaPembeliDicatat,
             onDismiss = { showPelangganDialog = false },
             onSimpan = { nama ->
-                viewModel.setNamaPelanggan(nama)
+                namaPembeliDicatat = nama
                 showPelangganDialog = false
             }
         )
     }
 
-    // Dialog Catatan Transaksi
-    if (showCatatanDialog) {
-        CatatanDialog(
-            catatanAwal = state.catatanTransaksi,
-            onDismiss = { showCatatanDialog = false },
-            onSimpan = { catatan ->
-                viewModel.setCatatan(catatan)
-                showCatatanDialog = false
-            }
-        )
-    }
-
-    // Menu Aksi Lainnya
-    if (showMenuLainnya) {
-        AlertDialog(
-            onDismissRequest = { showMenuLainnya = false },
-            title = { Text("Aksi Keranjang", fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    TextButton(
-                        onClick = {
-                            viewModel.kosongkanKeranjang()
-                            showMenuLainnya = false
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                            Spacer(Modifier.width(12.dp))
-                            Text("Kosongkan Keranjang", color = MaterialTheme.colorScheme.error)
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showMenuLainnya = false }) { Text("Tutup") }
-            }
-        )
-    }
-
-    // Dialog Pembayaran
     if (showPembayaranDialog) {
         PembayaranDialog(
             total = state.total,
-            namaPelangganDefault = state.namaPelanggan,
+            namaPembeliAwal = namaPembeliDicatat,
             onDismiss = { showPembayaranDialog = false },
             onKonfirmasi = { metode, jumlahDiterima, namaPembeli, catatanMetode ->
                 showPembayaranDialog = false
@@ -397,378 +296,228 @@ fun KasirScreen(
 }
 
 /**
- * 1. TOP BAR
- * Ringkas, modern, menyajikan info penting toko & status online.
+ * Top bar Kasir - identitas toko (logo + nama, pola sama seperti HeaderDashboard supaya
+ * konsisten) plus status "Online", notifikasi & printer (placeholder, belum ada sistem
+ * notifikasi/status printer real-time - sama seperti bel di Dashboard), dan avatar inisial
+ * kasir yang sedang login. Warna tetap ikut branding dinamis toko (ThemeConfig), bukan hardcode.
  */
 @Composable
-private fun KasirTopBar(
-    namaToko: String,
-    kasirNama: String,
-    isPrinterReady: Boolean
-) {
-    Surface(
-        color = NadaSurface,
-        tonalElevation = 1.dp,
-        shadowElevation = 1.dp
-    ) {
+private fun HeaderKasir(namaToko: String, logoPath: String?, namaPengguna: String) {
+    Column {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Kiri: Brand + Toko + Status Online
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    color = NadaBlue,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Filled.PointOfSale,
-                            contentDescription = "NADA POS",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-                Spacer(Modifier.width(10.dp))
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "NADA POS",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = NadaTextDark,
-                            letterSpacing = 0.5.sp
-                        )
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            namaToko,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = NadaTextMuted,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text("•", color = NadaTextMuted, fontSize = 10.sp)
-                        Spacer(Modifier.width(6.dp))
-                        // Status pill "Online"
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = NadaSuccessLight,
-                            contentColor = NadaSuccess
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .background(NadaSuccess, CircleShape)
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    "Online",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!logoPath.isNullOrBlank() && java.io.File(logoPath).exists()) {
+                    AsyncImage(
+                        model = java.io.File(logoPath),
+                        contentDescription = "Logo toko",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))
+                    )
+                } else {
+                    Icon(
+                        Icons.Filled.Storefront,
+                        contentDescription = null,
+                        tint = androidx.compose.ui.graphics.Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
-
-            // Kanan: Ikon Printer, Notifikasi, Avatar Kasir
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { /* Status printer */ }, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        Icons.Filled.Print,
-                        contentDescription = "Printer",
-                        tint = if (isPrinterReady) NadaBlue else NadaTextMuted,
-                        modifier = Modifier.size(20.dp)
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    namaToko,
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(WarnaOnline)
                     )
+                    Spacer(Modifier.width(4.dp))
+                    Text("Online", style = MaterialTheme.typography.labelSmall, color = WarnaOnline)
                 }
-                IconButton(onClick = { /* Notifikasi */ }, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        Icons.Outlined.Notifications,
-                        contentDescription = "Notifikasi",
-                        tint = NadaTextMuted,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Spacer(Modifier.width(4.dp))
-                // Avatar Kasir
-                Surface(
-                    shape = CircleShape,
-                    color = NadaBlueLight,
-                    border = BorderStroke(1.5.dp, NadaBlue.copy(alpha = 0.3f)),
-                    modifier = Modifier.size(34.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            kasirNama.take(1).uppercase(),
-                            color = NadaBlue,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        )
-                    }
-                }
+            }
+            IconButton(onClick = { /* Notifikasi belum tersedia di phase ini, sama seperti Dashboard */ }, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Outlined.Notifications,
+                    contentDescription = "Notifikasi",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            IconButton(onClick = { /* Status printer real-time belum ada - atur printer di tab Pengaturan */ }, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Filled.Print,
+                    contentDescription = "Printer",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    inisialNama(namaPengguna),
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
         }
+        Divider()
+    }
+}
+
+/** Warna status "Online" - tetap konsisten terlepas dari warna branding toko (sama seperti warna status stok di Dashboard). */
+private val WarnaOnline = androidx.compose.ui.graphics.Color(0xFF2E7D32)
+
+/** Inisial 1-2 huruf dari nama pengguna untuk avatar bulat di header (mis. "Rina Kasir" -> "RK"). */
+private fun inisialNama(nama: String): String {
+    val kata = nama.trim().split(" ").filter { it.isNotBlank() }
+    return when {
+        kata.isEmpty() -> "?"
+        kata.size == 1 -> kata[0].take(2).uppercase()
+        else -> (kata[0].take(1) + kata[1].take(1)).uppercase()
     }
 }
 
 /**
- * 2. SEARCH + SCAN BARCODE
- * Search bar besar dengan tombol aksi kamera ponsel yang mencolok.
+ * Baris chip kategori produk (horizontal scroll) untuk filter cepat di grid Kasir.
+ * "Semua" merepresentasikan kategoriTerpilih == null. Data kategori & filter sudah ada
+ * di KasirViewModel sebelumnya (pilihKategori) - baris ini murni UI yang sebelumnya belum ada.
  */
 @Composable
-private fun SearchScanSection(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onScanClick: () -> Unit
+private fun CategoryChipsRow(
+    kategori: List<com.nada.kasir.core.data.local.entity.CategoryEntity>,
+    kategoriTerpilih: Long?,
+    onPilih: (Long?) -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 6.dp)
-    ) {
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            placeholder = {
-                Text(
-                    "Cari produk atau scan barcode",
-                    fontSize = 13.sp,
-                    color = NadaTextMuted
-                )
-            },
-            leadingIcon = {
-                Icon(
-                    Icons.Default.Search,
-                    contentDescription = "Cari",
-                    tint = NadaTextMuted,
-                    modifier = Modifier.size(22.dp)
-                )
-            },
-            trailingIcon = {
-                Surface(
-                    onClick = onScanClick,
-                    shape = RoundedCornerShape(12.dp),
-                    color = NadaBlue,
-                    contentColor = Color.White,
-                    modifier = Modifier
-                        .height(36.dp)
-                        .padding(end = 6.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.CameraAlt,
-                            contentDescription = "Scan",
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(Modifier.width(5.dp))
-                        Text(
-                            "Scan",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                }
-            },
-            shape = RoundedCornerShape(18.dp),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        // Microcopy panduan scan
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 6.dp, top = 4.dp)
-        ) {
-            Text(
-                "📷 Scan barcode menggunakan kamera HP",
-                style = MaterialTheme.typography.bodySmall,
-                color = NadaTextMuted,
-                fontSize = 11.sp
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        item {
+            FilterChip(
+                selected = kategoriTerpilih == null,
+                onClick = { onPilih(null) },
+                label = { Text("Semua") }
+            )
+        }
+        items(kategori, key = { it.id }) { kat ->
+            FilterChip(
+                selected = kategoriTerpilih == kat.id,
+                onClick = { onPilih(kat.id) },
+                label = { Text(kat.nama) }
             )
         }
     }
 }
 
 /**
- * 3. KATEGORI PRODUK
- * Horizontal category chips dengan highlight NADA Blue.
+ * Kartu produk di grid Kasir - dibuat RINGKAS (padding & teks kecil, maks 1 baris nama)
+ * supaya makin banyak produk terlihat sekaligus tanpa scroll berlebihan, tapi tetap
+ * NYAMAN disentuh (kartu persegi utuh yang bisa ditekan, bukan cuma teks kecil).
+ * Foto produk mengisi bagian atas kartu; kalau belum ada foto, tampil ikon netral
+ * supaya grid tetap rapi (bukan lubang kosong).
  */
 @Composable
-private fun CategoryChipsSection(
-    categories: List<String>,
-    selectedCategory: String,
-    onCategorySelect: (String) -> Unit
+private fun ProdukKasirCard(
+    nama: String,
+    harga: Double,
+    stok: Int,
+    fotoPath: String?,
+    jumlahDiKeranjang: Int,
+    onClick: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        categories.forEach { kategori ->
-            val isAktif = kategori.equals(selectedCategory, ignoreCase = true)
-            Surface(
-                onClick = { onCategorySelect(kategori) },
-                shape = RoundedCornerShape(12.dp),
-                color = if (isAktif) NadaBlue else NadaSurface,
-                border = if (isAktif) null else BorderStroke(1.dp, NadaBorder),
-                shadowElevation = if (isAktif) 2.dp else 0.dp,
-                modifier = Modifier.height(38.dp)
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.padding(horizontal = 14.dp)
-                ) {
-                    Text(
-                        kategori,
-                        fontSize = 13.sp,
-                        fontWeight = if (isAktif) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isAktif) Color.White else NadaTextDark
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * 4. PRODUCT CARD (GRID 2 KOLOM)
- * Kartu produk minimalis, harga kontras tinggi, foto, stok, dan tombol (+)
- */
-@Composable
-private fun ProductCard(
-    produk: ProductEntity,
-    qtyDiKeranjang: Int,
-    onTambah: () -> Unit
-) {
-    Surface(
-        onClick = onTambah,
-        shape = RoundedCornerShape(16.dp),
-        color = NadaSurface,
-        border = BorderStroke(1.dp, if (qtyDiKeranjang > 0) NadaBlue.copy(alpha = 0.5f) else NadaBorder),
-        shadowElevation = if (qtyDiKeranjang > 0) 2.dp else 1.dp,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            // Gambar Produk + Badge Qty Keranjang
+    ElevatedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Column {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(110.dp)
-                    .background(NadaBackground),
+                    .aspectRatio(1f) // foto selalu persegi -> grid rapi walau kartu ikut melebar/menyempit
+                    // Tile warna branding toko (bukan abu-abu generik) - konsisten dengan tile
+                    // ikon lain di aplikasi (logo header, kartu konfirmasi scan barcode).
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
-                if (!produk.fotoPath.isNullOrBlank()) {
+                if (!fotoPath.isNullOrBlank() && java.io.File(fotoPath).exists()) {
                     AsyncImage(
-                        model = produk.fotoPath,
-                        contentDescription = produk.nama,
+                        model = java.io.File(fotoPath),
+                        contentDescription = nama,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
                     Icon(
-                        Icons.Filled.ShoppingBag,
+                        Icons.Filled.Inventory2,
                         contentDescription = null,
-                        tint = NadaBlue.copy(alpha = 0.35f),
-                        modifier = Modifier.size(44.dp)
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(26.dp)
                     )
                 }
-
-                // Badge kuantitas jika sudah ada di keranjang
-                if (qtyDiKeranjang > 0) {
+                if (jumlahDiKeranjang > 0) {
                     Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = NadaBlue,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(6.dp)
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = CircleShape,
+                        modifier = Modifier.align(Alignment.TopEnd).padding(6.dp)
                     ) {
                         Text(
-                            "${qtyDiKeranjang}x",
-                            color = Color.White,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            "$jumlahDiKeranjang",
+                            color = androidx.compose.ui.graphics.Color.White,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+                if (stok <= 0) {
+                    Surface(
+                        color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.55f),
+                        modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter)
+                    ) {
+                        Text(
+                            "Habis",
+                            color = androidx.compose.ui.graphics.Color.White,
+                            style = MaterialTheme.typography.labelSmall,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                         )
                     }
                 }
             }
-
-            // Info Produk
-            Column(modifier = Modifier.padding(10.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
                 Text(
-                    produk.nama,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = NadaTextDark,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.height(38.dp)
+                    nama,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
-                Spacer(Modifier.height(4.dp))
                 Text(
-                    CurrencyFormatter.format(produk.hargaJual),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = NadaBlue
+                    CurrencyFormatter.format(harga),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    maxLines = 1
                 )
-                Spacer(Modifier.height(6.dp))
-
-                // Baris Bawah: Stok & Tombol Tambah
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val stokRendah = produk.stok <= 5
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = if (stokRendah) NadaWarningLight else NadaBackground
-                    ) {
-                        Text(
-                            "Stok ${produk.stok}",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = if (stokRendah) NadaWarning else NadaTextMuted,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-
-                    // Tombol Tambah (+)
-                    Surface(
-                        shape = CircleShape,
-                        color = NadaBlueLight,
-                        border = BorderStroke(1.dp, NadaBlue.copy(alpha = 0.3f)),
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = "Tambah",
-                                tint = NadaBlue,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
+                // "Stok N" (poin desain mockup) - hanya saat stok masih ada, karena stok 0
+                // sudah ditandai lewat overlay "Habis" di atas, jadi tidak perlu diulang.
+                if (stok > 0) {
+                    Text(
+                        "Stok $stok",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
                 }
             }
         }
@@ -776,529 +525,262 @@ private fun ProductCard(
 }
 
 /**
- * 5, 6, 7 & 8. CART & CHECKOUT PANEL
- * Menggabungkan Keranjang, Quick Actions, Ringkasan Transaksi, dan Tombol BAYAR.
+ * Panel keranjang - SELALU terlihat menempel di bagian bawah layar Kasir (bukan modal
+ * bottom sheet lagi), sesuai revisi desain mockup: kasir langsung lihat & ubah pesanan
+ * tanpa harus menyentuh dulu untuk membukanya. Saat kosong, panel otomatis mengecil dan
+ * hanya menampilkan pesan ("empty cart state yang informatif" sesuai prinsip UX di desain
+ * mockup) supaya grid produk di atas tetap dapat ruang paling luas.
  */
 @Composable
-private fun CartBottomPanel(
-    keranjang: List<KeranjangItem>,
+private fun KeranjangPanel(
+    keranjang: List<com.nada.kasir.core.domain.model.KeranjangItem>,
     subtotal: Double,
     diskonTotal: Double,
     total: Double,
-    namaPelanggan: String,
-    catatan: String,
+    namaPembeli: String,
+    isProsesBayar: Boolean,
     onUbahQty: (Long, Int) -> Unit,
     onHapusItem: (Long) -> Unit,
-    onBukaDiskon: () -> Unit,
-    onBukaPelanggan: () -> Unit,
-    onBukaCatatan: () -> Unit,
-    onMenuLainnya: () -> Unit,
+    onDiskonClick: () -> Unit,
+    onPelangganClick: () -> Unit,
     onBayar: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-
     Surface(
-        color = NadaSurface,
-        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 3.dp,
         shadowElevation = 8.dp,
-        border = BorderStroke(1.dp, NadaBorder)
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp)
-        ) {
-            // Header Keranjang & Toggle Expand
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded }
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            if (keranjang.isEmpty()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        Icons.Filled.ShoppingBag,
+                        Icons.Outlined.ShoppingCart,
                         contentDescription = null,
-                        tint = NadaBlue,
-                        modifier = Modifier.size(18.dp)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp)
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "Keranjang · ${keranjang.sumOf { it.qty }} item",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = NadaTextDark
-                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text("Keranjang masih kosong", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium))
+                        Text(
+                            "Pilih produk di atas untuk mulai transaksi",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
+                return@Column
+            }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        if (expanded) "Sembunyikan" else "Rincian",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = NadaBlue,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Icon(
-                        if (expanded) Icons.Filled.Close else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = NadaBlue,
-                        modifier = Modifier.size(18.dp)
-                    )
+            Text(
+                "Keranjang · ${keranjang.sumOf { it.qty }} item",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+            )
+            Spacer(Modifier.height(8.dp))
+
+            // Tinggi maksimum item list dikecilkan dari versi sheet (320dp -> 150dp) karena
+            // panel ini sekarang berbagi layar dengan grid produk di atasnya, bukan mengambil
+            // alih seluruh layar seperti modal. Kalau item lebih banyak dari itu, tetap bisa
+            // di-scroll di dalam area kecil ini tanpa mendorong tombol BAYAR keluar layar.
+            Column(modifier = Modifier.heightIn(max = 150.dp)) {
+                LazyColumn {
+                    items(keranjang, key = { it.productId }) { item ->
+                        KeranjangRow(
+                            nama = item.nama,
+                            qty = item.qty,
+                            harga = item.harga,
+                            subtotal = item.subtotal,
+                            onQtyChange = { qtyBaru -> onUbahQty(item.productId, qtyBaru) },
+                            onHapus = { onHapusItem(item.productId) }
+                        )
+                        Divider()
+                    }
                 }
             }
 
-            // Daftar Item Keranjang (tampil 1 item ringkas saat collapsed, full list saat expanded)
-            val itemTampil = if (expanded) keranjang else keranjang.take(1)
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-            ) {
-                itemTampil.forEach { item ->
-                    CartItemRow(
-                        item = item,
-                        onUbahQty = { qtyBaru -> onUbahQty(item.productId, qtyBaru) },
-                        onHapus = { onHapusItem(item.productId) }
-                    )
-                }
-                if (!expanded && keranjang.size > 1) {
-                    Text(
-                        "+ ${keranjang.size - 1} item lainnya...",
-                        fontSize = 11.sp,
-                        color = NadaTextMuted,
-                        modifier = Modifier.padding(start = 4.dp, top = 2.dp)
-                    )
+            Spacer(Modifier.height(10.dp))
+            RingkasanBaris("Subtotal", subtotal)
+            // Baris Diskon hanya muncul kalau ada nilainya, dan pakai tanda "−" manual
+            // (bukan angka negatif ke CurrencyFormatter) supaya format tetap rapi "− Rp2.000".
+            if (diskonTotal > 0.0) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Diskon", style = MaterialTheme.typography.bodyMedium)
+                    Text("− ${CurrencyFormatter.format(diskonTotal)}", style = MaterialTheme.typography.bodyMedium)
                 }
             }
-
-            // Quick Actions: + Diskon, + Pelanggan, + Catatan, ⋮ Lainnya
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                QuickActionChip(
-                    label = if (diskonTotal > 0) "-${CurrencyFormatter.format(diskonTotal)}" else "+ Diskon",
-                    isHighlight = diskonTotal > 0,
-                    onClick = onBukaDiskon,
-                    modifier = Modifier.weight(1f)
-                )
-                QuickActionChip(
-                    label = if (namaPelanggan.isNotBlank()) namaPelanggan else "+ Pelanggan",
-                    isHighlight = namaPelanggan.isNotBlank(),
-                    onClick = onBukaPelanggan,
-                    modifier = Modifier.weight(1f)
-                )
-                QuickActionChip(
-                    label = if (catatan.isNotBlank()) "Ada Catatan" else "+ Catatan",
-                    isHighlight = catatan.isNotBlank(),
-                    onClick = onBukaCatatan,
-                    modifier = Modifier.weight(1f)
-                )
-                QuickActionChip(
-                    label = "⋮ Lainnya",
-                    isHighlight = false,
-                    onClick = onMenuLainnya,
-                    modifier = Modifier.width(72.dp)
-                )
-            }
-
-            Divider(color = NadaBorder, thickness = 1.dp, modifier = Modifier.padding(vertical = 6.dp))
-
-            // Transaction Summary: Subtotal, Diskon, TOTAL
+            Divider(modifier = Modifier.padding(vertical = 6.dp))
+            // Total pakai typography terbesar di panel ini (poin desain mockup) supaya
+            // nominal akhir paling menonjol & gampang dibaca kasir sebelum konfirmasi bayar.
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Bottom
             ) {
-                Column {
-                    Row {
-                        Text("Subtotal", fontSize = 12.sp, color = NadaTextMuted)
-                        Spacer(Modifier.width(8.dp))
-                        Text(CurrencyFormatter.format(subtotal), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = NadaTextDark)
-                    }
-                    if (diskonTotal > 0) {
-                        Row {
-                            Text("Diskon", fontSize = 12.sp, color = NadaWarning)
-                            Spacer(Modifier.width(8.dp))
-                            Text("-${CurrencyFormatter.format(diskonTotal)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = NadaWarning)
+                Text("Total", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    CurrencyFormatter.format(total),
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+            // Quick actions (poin desain mockup): Diskon & Pelanggan aktif sungguhan
+            // (Diskon -> viewModel.setDiskonTotal, Pelanggan -> ikut mengisi dialog
+            // Pembayaran). Catatan transaksi belum tersedia di fase ini - belum ada kolom
+            // untuk itu di data transaksi - ditampilkan tetap sesuai desain, sama seperti
+            // ikon Notifikasi/Printer di header yang juga masih placeholder.
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item {
+                    AksiCepatChip(
+                        label = if (diskonTotal > 0.0) "Diskon ${CurrencyFormatter.format(diskonTotal)}" else "+ Diskon",
+                        aktif = diskonTotal > 0.0,
+                        onClick = onDiskonClick
+                    )
+                }
+                item {
+                    AksiCepatChip(
+                        label = namaPembeli.ifBlank { "+ Pelanggan" },
+                        aktif = namaPembeli.isNotBlank(),
+                        onClick = onPelangganClick
+                    )
+                }
+                item {
+                    AksiCepatChip(label = "+ Catatan", aktif = false, onClick = {})
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = onBayar,
+                enabled = keranjang.isNotEmpty() && !isProsesBayar,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().height(56.dp)
+            ) {
+                if (isProsesBayar) {
+                    Text("Memproses...", style = MaterialTheme.typography.titleMedium)
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("BAYAR", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(CurrencyFormatter.format(total), style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.width(4.dp))
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
                         }
                     }
                 }
-
-                // TOTAL (Largest typography, highest contrast)
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("TOTAL", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = NadaTextMuted)
-                    Text(
-                        CurrencyFormatter.format(total),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = NadaBlue
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            // Primary Payment Button (Main CTA)
-            Button(
-                onClick = onBayar,
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = NadaBlue),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            "BAYAR",
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 16.sp,
-                            color = Color.White
-                        )
-                        Text(
-                            "F4 — Bayar",
-                            fontSize = 11.sp,
-                            color = Color.White.copy(alpha = 0.8f)
-                        )
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            CurrencyFormatter.format(total),
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 18.sp,
-                            color = Color.White
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
             }
         }
     }
 }
 
-/**
- * Baris item di dalam keranjang belanja dengan stepper [- Qty +]
- */
 @Composable
-private fun CartItemRow(
-    item: KeranjangItem,
-    onUbahQty: (Int) -> Unit,
-    onHapus: () -> Unit
-) {
-    Surface(
-        color = NadaBackground,
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 3.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    item.nama,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = NadaTextDark,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    "${CurrencyFormatter.format(item.harga)} × ${item.qty} = ${CurrencyFormatter.format(item.harga * item.qty)}",
-                    fontSize = 12.sp,
-                    color = NadaTextMuted
-                )
-            }
-
-            // Stepper [-] qty [+]
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Surface(
-                    onClick = { onUbahQty(item.qty - 1) },
-                    shape = CircleShape,
-                    color = NadaSurface,
-                    border = BorderStroke(1.dp, NadaBorder),
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text("-", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = NadaTextDark)
-                    }
-                }
-
-                Text(
-                    "${item.qty}",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = NadaTextDark,
-                    modifier = Modifier.padding(horizontal = 6.dp)
-                )
-
-                Surface(
-                    onClick = { onUbahQty(item.qty + 1) },
-                    shape = CircleShape,
-                    color = NadaBlueLight,
-                    border = BorderStroke(1.dp, NadaBlue.copy(alpha = 0.3f)),
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Default.Add,
-                            contentDescription = "Tambah",
-                            tint = NadaBlue,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * Quick Action Chip Button (+ Diskon, + Pelanggan, dsb.)
- */
-@Composable
-private fun QuickActionChip(
-    label: String,
-    isHighlight: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
+private fun AksiCepatChip(label: String, aktif: Boolean, onClick: () -> Unit) {
+    AssistChip(
         onClick = onClick,
-        shape = RoundedCornerShape(10.dp),
-        color = if (isHighlight) NadaBlueLight else NadaSurface,
-        border = BorderStroke(1.dp, if (isHighlight) NadaBlue else NadaBorder),
-        modifier = modifier.height(34.dp)
+        label = { Text(label, maxLines = 1) },
+        colors = if (aktif) {
+            AssistChipDefaults.assistChipColors(
+                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                labelColor = MaterialTheme.colorScheme.primary
+            )
+        } else {
+            AssistChipDefaults.assistChipColors()
+        }
+    )
+}
+
+@Composable
+private fun KeranjangRow(nama: String, qty: Int, harga: Double, subtotal: Double, onQtyChange: (Int) -> Unit, onHapus: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 6.dp)) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(nama, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             Text(
-                label,
-                fontSize = 11.sp,
-                fontWeight = if (isHighlight) FontWeight.Bold else FontWeight.Medium,
-                color = if (isHighlight) NadaBlue else NadaTextDark,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                "${CurrencyFormatter.format(harga)} × $qty · ${CurrencyFormatter.format(subtotal)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.width(4.dp))
+        IconButtonQty(label = "−", onClick = { onQtyChange(qty - 1) })
+        Text("$qty", modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.bodyMedium)
+        IconButtonQty(label = "+", onClick = { onQtyChange(qty + 1) })
+        // Hapus langsung dari keranjang - versi ringkas dari "swipe/delete gesture" di
+        // desain mockup (swipe asli butuh dependency drag tambahan, tombol ini lebih
+        // pasti disentuh jarinya di HP kecil & tetap satu langkah).
+        IconButton(onClick = onHapus, modifier = Modifier.size(32.dp)) {
+            Icon(
+                Icons.Outlined.Delete,
+                contentDescription = "Hapus dari keranjang",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
             )
         }
     }
 }
 
-/**
- * Dialog Pemberian Diskon
- */
+/** Tombol stepper qty bulat (poin desain mockup, sebelumnya kotak). */
 @Composable
-private fun DiskonDialog(
-    diskonAwal: Double,
-    subtotal: Double,
-    onDismiss: () -> Unit,
-    onTerapkan: (Double) -> Unit
-) {
-    var nominalText by remember { mutableStateOf(if (diskonAwal > 0) diskonAwal.toLong().toString() else "") }
-    var modePersen by remember { mutableStateOf(false) }
-    var persenText by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Terapkan Diskon", fontWeight = FontWeight.Bold) },
-        text = {
-            Column {
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    FilterChip(
-                        selected = !modePersen,
-                        onClick = { modePersen = false },
-                        label = { Text("Nominal (Rp)") },
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    FilterChip(
-                        selected = modePersen,
-                        onClick = { modePersen = true },
-                        label = { Text("Persentase (%)") },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-
-                if (!modePersen) {
-                    OutlinedTextField(
-                        value = nominalText,
-                        onValueChange = { nominalText = it.filter { c -> c.isDigit() } },
-                        label = { Text("Nominal Diskon (Rp)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                } else {
-                    OutlinedTextField(
-                        value = persenText,
-                        onValueChange = { persenText = it.filter { c -> c.isDigit() }.take(3) },
-                        label = { Text("Persen Diskon (%)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val nominal = if (!modePersen) {
-                        nominalText.toDoubleOrNull() ?: 0.0
-                    } else {
-                        val persen = persenText.toDoubleOrNull() ?: 0.0
-                        (subtotal * (persen / 100.0)).coerceAtMost(subtotal)
-                    }
-                    onTerapkan(nominal)
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = NadaBlue)
-            ) { Text("Terapkan") }
-        },
-        dismissButton = {
-            TextButton(onClick = { onTerapkan(0.0) }) { Text("Hapus Diskon") }
-        }
-    )
+private fun IconButtonQty(label: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.size(32.dp),
+        contentPadding = PaddingValues(0.dp),
+        shape = CircleShape
+    ) {
+        Text(label)
+    }
 }
 
-/**
- * Dialog Input Nama Pelanggan
- */
 @Composable
-private fun PelangganDialog(
-    namaAwal: String,
-    onDismiss: () -> Unit,
-    onSimpan: (String) -> Unit
-) {
-    var nama by remember { mutableStateOf(namaAwal) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Nama Pelanggan / Meja", fontWeight = FontWeight.Bold) },
-        text = {
-            OutlinedTextField(
-                value = nama,
-                onValueChange = { nama = it },
-                label = { Text("Nama atau Nomor Meja") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = {
-            Button(
-                onClick = { onSimpan(nama.trim()) },
-                colors = ButtonDefaults.buttonColors(containerColor = NadaBlue)
-            ) { Text("Simpan") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Batal") }
-        }
-    )
+private fun RingkasanBaris(label: String, nilai: Double, tebal: Boolean = false) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = if (tebal) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium)
+        Text(
+            CurrencyFormatter.format(nilai),
+            style = if (tebal) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium
+        )
+    }
 }
 
-/**
- * Dialog Input Catatan Transaksi
- */
-@Composable
-private fun CatatanDialog(
-    catatanAwal: String,
-    onDismiss: () -> Unit,
-    onSimpan: (String) -> Unit
-) {
-    var catatan by remember { mutableStateOf(catatanAwal) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Catatan Transaksi", fontWeight = FontWeight.Bold) },
-        text = {
-            OutlinedTextField(
-                value = catatan,
-                onValueChange = { catatan = it },
-                label = { Text("Tulis catatan transaksi...") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2
-            )
-        },
-        confirmButton = {
-            Button(
-                onClick = { onSimpan(catatan.trim()) },
-                colors = ButtonDefaults.buttonColors(containerColor = NadaBlue)
-            ) { Text("Simpan") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Batal") }
-        }
-    )
-}
-
-/**
- * Dialog Pembayaran (Tunai, QRIS, Lainnya)
- */
 @Composable
 private fun PembayaranDialog(
     total: Double,
-    namaPelangganDefault: String = "",
+    namaPembeliAwal: String = "",
     onDismiss: () -> Unit,
     onKonfirmasi: (MetodePembayaran, Double, String?, String?) -> Unit
 ) {
     var metode by remember { mutableStateOf(MetodePembayaran.TUNAI) }
     var uangDiterimaText by remember { mutableStateOf("") }
-    var namaPembeli by remember { mutableStateOf(namaPelangganDefault) }
+    // Sudah diisi lebih dulu kalau kasir pakai quick action "+ Pelanggan" di keranjang -
+    // tetap bisa diubah manual di sini seperti sebelumnya.
+    var namaPembeli by remember { mutableStateOf(namaPembeliAwal) }
     var catatanMetodeLainnya by remember { mutableStateOf("") }
     val uangDiterima = uangDiterimaText.toDoubleOrNull() ?: 0.0
     val kembalian = uangDiterima - total
 
+    // Hanya metode yang benar-benar sering dipakai yang ditampilkan (Transfer/Debit/Kartu
+    // Kredit disembunyikan dari kasir, tapi enum-nya tetap utuh supaya transaksi lama dengan
+    // metode itu tetap bisa dibaca). Kalau pembeli bayar dengan cara lain, kasir pilih
+    // "Lainnya" dan tulis manual nama metodenya (mis. "Transfer BCA").
     val metodeDitampilkan = listOf(MetodePembayaran.TUNAI, MetodePembayaran.QRIS, MetodePembayaran.LAINNYA)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Pembayaran", fontWeight = FontWeight.Bold) },
+        title = { Text("Pembayaran") },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                Surface(
-                    color = NadaBlueLight,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Total Tagihan", fontWeight = FontWeight.Medium, color = NadaTextDark)
-                        Text(
-                            CurrencyFormatter.format(total),
-                            fontWeight = FontWeight.ExtraBold,
-                            color = NadaBlue,
-                            fontSize = 18.sp
-                        )
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-
+                Text("Total: ${CurrencyFormatter.format(total)}", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = namaPembeli,
                     onValueChange = { namaPembeli = it },
@@ -1306,37 +788,14 @@ private fun PembayaranDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(Modifier.height(10.dp))
-
-                Text("Metode Pembayaran", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    metodeDitampilkan.forEach { m ->
-                        val isPilih = metode == m
-                        Surface(
-                            onClick = { metode = m },
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (isPilih) NadaBlue else NadaSurface,
-                            border = BorderStroke(1.dp, if (isPilih) NadaBlue else NadaBorder),
-                            modifier = Modifier.weight(1f).height(40.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    if (m == MetodePembayaran.LAINNYA) "Lainnya" else m.name,
-                                    color = if (isPilih) Color.White else NadaTextDark,
-                                    fontWeight = if (isPilih) FontWeight.Bold else FontWeight.Medium,
-                                    fontSize = 13.sp
-                                )
-                            }
-                        }
+                Spacer(Modifier.height(8.dp))
+                metodeDitampilkan.forEach { m ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = metode == m, onClick = { metode = m })
+                        Text(if (m == MetodePembayaran.LAINNYA) "Lainnya" else m.name)
                     }
                 }
-
                 if (metode == MetodePembayaran.LAINNYA) {
-                    Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = catatanMetodeLainnya,
                         onValueChange = { catatanMetodeLainnya = it },
@@ -1345,49 +804,46 @@ private fun PembayaranDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-
                 if (metode == MetodePembayaran.TUNAI) {
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(4.dp))
                     PembayaranTunaiInput(
                         uangDiterimaText = uangDiterimaText,
                         onUangDiterimaTextChange = { uangDiterimaText = it },
                         total = total
                     )
                     Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Kembalian", fontWeight = FontWeight.SemiBold)
-                        Text(
-                            CurrencyFormatter.format(if (kembalian > 0) kembalian else 0.0),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (kembalian >= 0) NadaSuccess else MaterialTheme.colorScheme.error
-                        )
-                    }
+                    Text(
+                        "Kembalian: ${CurrencyFormatter.format(if (kembalian > 0) kembalian else 0.0)}",
+                        style = MaterialTheme.typography.titleMedium
+                    )
                 }
             }
         },
         confirmButton = {
-            Button(
+            TextButton(
                 onClick = {
                     val jumlah = if (metode == MetodePembayaran.TUNAI) uangDiterima else total
                     val catatan = if (metode == MetodePembayaran.LAINNYA) catatanMetodeLainnya.ifBlank { null } else null
                     onKonfirmasi(metode, jumlah, namaPembeli.ifBlank { null }, catatan)
                 },
-                enabled = (metode != MetodePembayaran.TUNAI || uangDiterima >= total) &&
-                        (metode != MetodePembayaran.LAINNYA || catatanMetodeLainnya.isNotBlank()),
-                colors = ButtonDefaults.buttonColors(containerColor = NadaBlue)
-            ) { Text("Konfirmasi Bayar") }
+                enabled = (metode != MetodePembayaran.TUNAI || uangDiterima > 0.0) &&
+                    (metode != MetodePembayaran.LAINNYA || catatanMetodeLainnya.isNotBlank())
+            ) { Text("Konfirmasi") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
     )
 }
 
+/** Pecahan uang tunai yang paling sering dipakai pembeli untuk transaksi kasir. */
 private val PECAHAN_UANG_UMUM = listOf(10_000.0, 20_000.0, 50_000.0, 100_000.0)
 
+/**
+ * Input "uang diterima" saat bayar tunai. Defaultnya kasir cukup sentuh salah satu
+ * pecahan umum (10rb/20rb/50rb/100rb) atau "Uang Pas". Kalau nominal dari pembeli
+ * tidak ada di pilihan itu, kasir bisa buka keypad angka bergaya kalkulator untuk
+ * mengetik nominal manual - tanpa perlu keyboard sistem Android yang penuh.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun PembayaranTunaiInput(
     uangDiterimaText: String,
@@ -1398,29 +854,26 @@ private fun PembayaranTunaiInput(
     val uangDiterima = uangDiterimaText.toDoubleOrNull() ?: 0.0
 
     Column {
-        Text("Uang Diterima", style = MaterialTheme.typography.labelMedium)
+        Text("Uang diterima", style = MaterialTheme.typography.labelMedium)
         Spacer(Modifier.height(4.dp))
 
+        // Layar penampil nominal, mirip kalkulator, biar kasir yakin sebelum konfirmasi.
         Surface(
-            color = NadaBackground,
-            shape = RoundedCornerShape(10.dp),
-            border = BorderStroke(1.dp, NadaBorder),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
                 text = CurrencyFormatter.format(uangDiterima),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.ExtraBold,
-                color = NadaBlue,
-                textAlign = TextAlign.End,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(10.dp)
+                style = MaterialTheme.typography.headlineSmall,
+                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                modifier = Modifier.fillMaxWidth().padding(12.dp)
             )
         }
         Spacer(Modifier.height(8.dp))
 
-        // Pilihan cepat pecahan uang umum
+        // Pilihan cepat pecahan uang umum, disusun grid 2x2 supaya tiap kotak
+        // cukup lebar dan nominalnya tidak terpotong (sebelumnya 1 baris isi 4).
         Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
             PECAHAN_UANG_UMUM.chunked(2).forEach { baris ->
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
@@ -1435,13 +888,15 @@ private fun PembayaranTunaiInput(
                                 Text(
                                     CurrencyFormatter.format(nominal),
                                     maxLines = 1,
+                                    style = MaterialTheme.typography.labelMedium,
                                     modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Center
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                 )
                             },
                             modifier = Modifier.weight(1f)
                         )
                     }
+                    // Kalau jumlah pecahan ganjil, isi slot kosong biar kotak terakhir tidak melebar sendiri.
                     if (baris.size < 2) {
                         Spacer(modifier = Modifier.weight(1f))
                     }
@@ -1450,23 +905,18 @@ private fun PembayaranTunaiInput(
         }
         Spacer(Modifier.height(4.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            TextButton(onClick = {
-                modeManual = false
-                onUangDiterimaTextChange(total.toLong().toString())
-            }) {
-                Text("Uang Pas (${CurrencyFormatter.format(total)})", fontWeight = FontWeight.Bold, color = NadaBlue)
-            }
-
-            TextButton(onClick = { modeManual = !modeManual }) {
-                Text(if (modeManual) "Pecahan Umum" else "Ketik Manual", color = NadaTextMuted)
-            }
+        TextButton(onClick = {
+            modeManual = false
+            onUangDiterimaTextChange(total.toLong().toString())
+        }) {
+            Text("Uang Pas (${CurrencyFormatter.format(total)})")
         }
 
-        if (modeManual) {
+        if (!modeManual) {
+            TextButton(onClick = { modeManual = true }) {
+                Text("Nominal lain? Ketik manual")
+            }
+        } else {
             Spacer(Modifier.height(4.dp))
             KeypadKalkulator(
                 onAngka = { digit ->
@@ -1480,6 +930,7 @@ private fun PembayaranTunaiInput(
     }
 }
 
+/** Keypad angka gaya kalkulator (0-9, hapus satu digit, bersihkan semua). */
 @Composable
 private fun KeypadKalkulator(onAngka: (String) -> Unit, onHapus: () -> Unit, onBersihkan: () -> Unit) {
     val barisTombol = listOf(
@@ -1500,12 +951,10 @@ private fun KeypadKalkulator(onAngka: (String) -> Unit, onHapus: () -> Unit, onB
                                 else -> onAngka(label)
                             }
                         },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp),
+                        modifier = Modifier.weight(1f).height(48.dp),
                         contentPadding = PaddingValues(0.dp)
                     ) {
-                        Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(label, style = MaterialTheme.typography.titleMedium)
                     }
                 }
             }
@@ -1514,48 +963,21 @@ private fun KeypadKalkulator(onAngka: (String) -> Unit, onHapus: () -> Unit, onB
 }
 
 @Composable
-private fun TransaksiBerhasilDialog(
-    nomorAntrian: Int?,
-    onTransaksiBaru: () -> Unit,
-    onCetak: () -> Unit,
-    onBagikan: () -> Unit
-) {
+private fun TransaksiBerhasilDialog(nomorAntrian: Int?, onTransaksiBaru: () -> Unit, onCetak: () -> Unit, onBagikan: () -> Unit) {
     AlertDialog(
         onDismissRequest = {},
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = NadaSuccess)
-                Spacer(Modifier.width(8.dp))
-                Text("TRANSAKSI BERHASIL", fontWeight = FontWeight.Bold)
-            }
-        },
+        title = { Text("TRANSAKSI BERHASIL") },
         text = {
             Column {
-                Text("Transaksi telah berhasil disimpan.")
+                Text("Transaksi telah tersimpan.")
                 nomorAntrian?.let {
                     Spacer(Modifier.height(12.dp))
-                    Surface(
-                        color = NadaBlueLight,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(12.dp)
-                        ) {
-                            Text("Nomor Antrian", style = MaterialTheme.typography.labelMedium, color = NadaTextMuted)
-                            Text("$it", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.ExtraBold, color = NadaBlue)
-                        }
-                    }
+                    Text("Nomor Antrian", style = MaterialTheme.typography.labelMedium)
+                    Text("$it", style = MaterialTheme.typography.displaySmall)
                 }
             }
         },
-        confirmButton = {
-            Button(
-                onClick = onTransaksiBaru,
-                colors = ButtonDefaults.buttonColors(containerColor = NadaBlue)
-            ) { Text("Transaksi Baru") }
-        },
+        confirmButton = { TextButton(onClick = onTransaksiBaru) { Text("Transaksi Baru") } },
         dismissButton = {
             Row {
                 TextButton(onClick = onCetak) { Text("Cetak Struk") }
