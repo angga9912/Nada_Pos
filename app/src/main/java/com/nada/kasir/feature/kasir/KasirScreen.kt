@@ -213,9 +213,9 @@ fun KasirScreen(
             )
             Spacer(Modifier.height(10.dp))
             CategoryChipsRow(
-                kategori = state.kategori,
-                kategoriTerpilih = state.kategoriTerpilih,
-                onPilih = viewModel::pilihKategori
+                kategori = state.kategoriList,
+                kategoriTerpilih = state.kategoriTerpilihId,
+                onPilih = { id, nama -> viewModel.pilihKategori(id, nama) }
             )
             Spacer(Modifier.height(8.dp))
             LazyVerticalGrid(
@@ -406,20 +406,20 @@ private fun inisialNama(nama: String): String {
 private fun CategoryChipsRow(
     kategori: List<com.nada.kasir.core.data.local.entity.CategoryEntity>,
     kategoriTerpilih: Long?,
-    onPilih: (Long?) -> Unit
+    onPilih: (Long?, String) -> Unit
 ) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             FilterChip(
                 selected = kategoriTerpilih == null,
-                onClick = { onPilih(null) },
+                onClick = { onPilih(null, "Semua") },
                 label = { Text("Semua") }
             )
         }
         items(kategori, key = { it.id }) { kat ->
             FilterChip(
                 selected = kategoriTerpilih == kat.id,
-                onClick = { onPilih(kat.id) },
+                onClick = { onPilih(kat.id, kat.nama) },
                 label = { Text(kat.nama) }
             )
         }
@@ -750,6 +750,69 @@ private fun RingkasanBaris(label: String, nilai: Double, tebal: Boolean = false)
             style = if (tebal) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium
         )
     }
+}
+
+@Composable
+private fun DiskonDialog(
+    diskonAwal: Double,
+    onDismiss: () -> Unit,
+    onSimpan: (Double) -> Unit
+) {
+    var nominalText by remember { mutableStateOf(if (diskonAwal > 0) diskonAwal.toLong().toString() else "") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Terapkan Diskon") },
+        text = {
+            OutlinedTextField(
+                value = nominalText,
+                onValueChange = { nominalText = it.filter { c -> c.isDigit() } },
+                label = { Text("Nominal Diskon (Rp)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val nominal = nominalText.toDoubleOrNull() ?: 0.0
+                    onSimpan(nominal)
+                }
+            ) { Text("Terapkan") }
+        },
+        dismissButton = {
+            TextButton(onClick = { onSimpan(0.0) }) { Text("Hapus Diskon") }
+        }
+    )
+}
+
+@Composable
+private fun PelangganDialog(
+    namaAwal: String,
+    onDismiss: () -> Unit,
+    onSimpan: (String) -> Unit
+) {
+    var nama by remember { mutableStateOf(namaAwal) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nama Pelanggan") },
+        text = {
+            OutlinedTextField(
+                value = nama,
+                onValueChange = { nama = it },
+                label = { Text("Nama Pelanggan / Catatan Meja") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onSimpan(nama.trim()) }) { Text("Simpan") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Batal") }
+        }
+    )
 }
 
 @Composable
