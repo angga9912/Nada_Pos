@@ -118,18 +118,18 @@ fun PenggunaScreen(
     userUntukHapus?.let { targetUser ->
         AlertDialog(
             onDismissRequest = { userUntukHapus = null },
-            title = { Text("Hapus Pengguna") },
-            text = { Text("Apakah Anda yakin ingin menghapus pengguna '${targetUser.nama}' (${targetUser.username})?") },
+            title = { Text("Nonaktifkan Pengguna") },
+            text = { Text("Apakah Anda yakin ingin menonaktifkan pengguna '${targetUser.nama}' (${targetUser.username})? Pengguna yang dinonaktifkan tidak akan bisa login.") },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.hapusPengguna(targetUser.id, currentUserId) { res ->
                         when (res) {
-                            is Result.Success -> pesanInfo = "Pengguna berhasil dihapus."
+                            is Result.Success -> pesanInfo = "Pengguna '${targetUser.username}' telah dinonaktifkan."
                             is Result.Failure -> pesanInfo = res.error.pesan
                         }
                     }
                     userUntukHapus = null
-                }) { Text("Ya, Hapus", color = MaterialTheme.colorScheme.error) }
+                }) { Text("Nonaktifkan", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = { userUntukHapus = null }) { Text("Batal") }

@@ -42,7 +42,8 @@ class BackupManager @Inject constructor(
     private val transactionDao: TransactionDao,
     private val stockMovementDao: StockMovementDao,
     private val printerDao: PrinterDao,
-    private val settingDao: SettingDao
+    private val settingDao: SettingDao,
+    private val auditLogDao: AuditLogDao
 ) {
     fun folderBackup(): File {
         val dir = File(context.getExternalFilesDir(null), "backup")
@@ -148,7 +149,7 @@ class BackupManager @Inject constructor(
             appDatabase.withTransaction {
                 // Tahap 2: baru sekarang data lama dihapus
                 storeDao.clearAll(); userDao.clearAll(); categoryDao.clearAll(); productDao.clearAll()
-                printerDao.clearAll(); settingDao.clearAll(); stockMovementDao.clearAll()
+                printerDao.clearAll(); settingDao.clearAll(); stockMovementDao.clearAll(); auditLogDao.clearAll()
                 transactionDao.clearPayments(); transactionDao.clearItems(); transactionDao.clearTransactions()
 
                 if (stores.isNotEmpty()) storeDao.insertAll(stores)

@@ -25,6 +25,12 @@ interface ProductDao {
     @Query("SELECT COUNT(*) FROM products WHERE barcode = :barcode AND deletedAt IS NULL")
     suspend fun countByBarcode(barcode: String): Int
 
+    @Query("SELECT COUNT(*) FROM products WHERE barcode = :barcode")
+    suspend fun countByBarcodeAll(barcode: String): Int
+
+    @Query("SELECT COUNT(*) FROM products WHERE kodeProduk = :kodeProduk")
+    suspend fun countByKodeProduk(kodeProduk: String): Int
+
     @Query("SELECT COUNT(*) FROM products WHERE barcode = :barcode AND id != :excludeId AND deletedAt IS NULL")
     suspend fun countByBarcodeExcludingId(barcode: String, excludeId: Long): Int
 

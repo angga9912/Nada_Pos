@@ -19,6 +19,7 @@ class EntityJsonMapperTest {
         val json = EntityJsonMapper.userToJson(user)
         val hasil = EntityJsonMapper.userFromJson(json)
 
+        assertEquals(user.id, hasil.id)
         assertEquals(user.nama, hasil.nama)
         assertEquals(user.username, hasil.username)
         assertEquals(user.passwordHash, hasil.passwordHash)
@@ -34,6 +35,7 @@ class EntityJsonMapperTest {
         val json = EntityJsonMapper.productToJson(original)
         val hasil = EntityJsonMapper.productFromJson(json)
 
+        assertEquals(original.id, hasil.id)
         assertEquals(original.kodeProduk, hasil.kodeProduk)
         assertEquals(original.barcode, hasil.barcode)
         assertEquals(original.hargaJual, hasil.hargaJual, 0.0)

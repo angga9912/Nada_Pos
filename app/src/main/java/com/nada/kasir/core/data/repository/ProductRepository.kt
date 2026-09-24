@@ -64,18 +64,26 @@ class ProductRepository @Inject constructor(
 
         appDatabase.withTransaction {
             baris.forEach { b ->
-                val sudahAda = !b.barcode.isNullOrBlank() && productDao.countByBarcode(b.barcode) > 0
-                if (sudahAda) {
-                    dilewati.add("${b.kodeProduk} (barcode sudah terdaftar)")
-                } else {
-                    productDao.insert(
-                        ProductEntity(
-                            kodeProduk = b.kodeProduk, barcode = b.barcode, nama = b.nama,
-                            categoryId = null, hargaBeli = b.hargaBeli, hargaJual = b.hargaJual,
-                            stok = b.stok, stokMinimum = 5
+                val kodeSudahAda = productDao.countByKodeProduk(b.kodeProduk) > 0
+                val barcodeSudahAda = !b.barcode.isNullOrBlank() && productDao.countByBarcodeAll(b.barcode) > 0
+
+                when {
+                    kodeSudahAda -> {
+                        dilewati.add("${b.kodeProduk} (kode produk sudah terdaftar)")
+                    }
+                    barcodeSudahAda -> {
+                        dilewati.add("${b.kodeProduk} (barcode sudah terdaftar)")
+                    }
+                    else -> {
+                        productDao.insert(
+                            ProductEntity(
+                                kodeProduk = b.kodeProduk, barcode = b.barcode, nama = b.nama,
+                                categoryId = null, hargaBeli = b.hargaBeli, hargaJual = b.hargaJual,
+                                stok = b.stok, stokMinimum = 5
+                            )
                         )
-                    )
-                    jumlahBerhasil++
+                        jumlahBerhasil++
+                    }
                 }
             }
         }

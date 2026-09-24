@@ -33,6 +33,6 @@ Thumbs.db
 *.hprof
 
 # Exported temp data
-export/
-backup/
+/export/
+/backup/
 crash_terakhir.txt

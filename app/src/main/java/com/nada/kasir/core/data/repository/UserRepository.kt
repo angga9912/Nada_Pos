@@ -85,12 +85,21 @@ class UserRepository @Inject constructor(
         return Result.Success(Unit)
     }
 
-    /** Hapus pengguna (Admin tidak boleh menghapus akunnya sendiri yang sedang aktif). */
+    /** Nonaktifkan pengguna (Admin tidak boleh menonaktifkan akunnya sendiri yang sedang aktif). */
     suspend fun hapusPengguna(targetUserId: Long, currentUserId: Long): Result<Unit> {
         if (targetUserId == currentUserId) {
             return Result.Failure(AppError.Lainnya("Tidak dapat menghapus akun Anda sendiri yang sedang aktif."))
         }
-        userDao.deleteById(targetUserId)
+        userDao.updateStatusAktif(targetUserId, false)
+        return Result.Success(Unit)
+    }
+
+    /** Ubah status aktif/nonaktif akun pengguna. */
+    suspend fun setStatusAktif(userId: Long, aktif: Boolean, currentUserId: Long): Result<Unit> {
+        if (userId == currentUserId && !aktif) {
+            return Result.Failure(AppError.Lainnya("Tidak dapat menonaktifkan akun Anda sendiri yang sedang aktif."))
+        }
+        userDao.updateStatusAktif(userId, aktif)
         return Result.Success(Unit)
     }
 

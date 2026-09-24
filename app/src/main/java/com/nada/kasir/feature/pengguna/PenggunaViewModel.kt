@@ -50,4 +50,11 @@ class PenggunaViewModel @Inject constructor(
             onSelesai(result)
         }
     }
+
+    fun toggleStatusAktif(user: UserEntity, currentAdminId: Long, onSelesai: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = userRepository.setStatusAktif(user.id, !user.aktif, currentAdminId)
+            onSelesai(result)
+        }
+    }
 }
