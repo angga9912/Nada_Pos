@@ -216,7 +216,7 @@ private fun MainShell(navController: NavHostController, sessionManager: SessionM
                 TabUtama.PRODUK -> ProdukScreen(isAdmin = isAdmin)
                 TabUtama.LAPORAN -> {
                     if (isAdmin) {
-                        LaporanScreen()
+                        LaporanScreen(onBukaRiwayat = { tabAktif = TabUtama.TRANSAKSI })
                     } else {
                         Box(
                             modifier = Modifier.fillMaxSize().padding(24.dp),
