@@ -100,7 +100,7 @@ class BluetoothPrinterManager @Inject constructor(
             .alignLeft()
             .textLine("Printer terhubung dengan baik.")
             .textLine("Ukuran kertas: $ukuranKertas")
-            .feedAndCut()
+            .feedAndCut(withCut = ukuranKertas == "80mm")
             .build()
         return cetak(macAddress, data)
     }

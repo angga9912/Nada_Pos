@@ -50,7 +50,7 @@ private enum class TabUtama(val label: String, val ikon: androidx.compose.ui.gra
     KASIR("Kasir", Icons.Filled.PointOfSale),
     PRODUK("Produk", Icons.Filled.Inventory2),
     LAPORAN("Laporan", Icons.Filled.Assessment),
-    STOK("Stok", Icons.Filled.ReceiptLong),
+    TRANSAKSI("Transaksi", Icons.Filled.ReceiptLong),
     LAINNYA("Lainnya", Icons.Filled.Settings)
 }
 
@@ -230,7 +230,7 @@ private fun MainShell(navController: NavHostController, sessionManager: SessionM
                         }
                     }
                 }
-                TabUtama.STOK -> RiwayatScreen(isAdmin = isAdmin)
+                TabUtama.TRANSAKSI -> RiwayatScreen(isAdmin = isAdmin)
                 TabUtama.LAINNYA -> PengaturanHubScreen(
                     isAdmin = isAdmin,
                     onBukaPengaturanPrinter = { navController.navigate(NadaRoute.PengaturanPrinter.route) },

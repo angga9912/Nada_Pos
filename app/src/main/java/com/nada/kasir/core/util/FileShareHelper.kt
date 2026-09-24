@@ -16,4 +16,13 @@ object FileShareHelper {
         }
         context.startActivity(Intent.createChooser(intent, "Bagikan file").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
+
+    /** Membuka Share Sheet Android untuk membagikan struk teks (poin 9 & 15). */
+    fun bagikanTeks(context: Context, teks: String, judul: String = "Bagikan Struk") {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, teks)
+        }
+        context.startActivity(Intent.createChooser(intent, judul).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
 }

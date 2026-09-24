@@ -2,6 +2,7 @@ package com.nada.kasir.core.data.repository
 
 import androidx.room.withTransaction
 import com.nada.kasir.core.data.local.AppDatabase
+import com.nada.kasir.core.data.local.dao.AuditLogDao
 import com.nada.kasir.core.data.local.dao.ProductDao
 import com.nada.kasir.core.data.local.dao.StockMovementDao
 import com.nada.kasir.core.data.local.dao.TransactionDao
@@ -22,6 +23,7 @@ class TransactionRepository @Inject constructor(
     private val transactionDao: TransactionDao,
     private val productDao: ProductDao,
     private val stockMovementDao: StockMovementDao,
+    private val auditLogDao: AuditLogDao,
     private val nomorTransaksiGenerator: NomorTransaksiGenerator,
     private val nomorAntrianGenerator: NomorAntrianGenerator
 ) {
@@ -157,6 +159,14 @@ class TransactionRepository @Inject constructor(
                     )
                 }
                 transactionDao.updateStatus(transactionId, TransactionStatus.CANCELLED)
+                auditLogDao.insert(
+                    AuditLogEntity(
+                        userId = trx.userId,
+                        aksi = "BATAL_TRANSAKSI",
+                        detail = "Pembatalan transaksi ${trx.noTransaksi} senilai ${trx.total}",
+                        tanggalWaktu = waktuBatal
+                    )
+                )
                 Result.Success(Unit)
             }
         } catch (e: Exception) {

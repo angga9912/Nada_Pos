@@ -57,6 +57,7 @@ fun KasirScreen(
     viewModel: KasirViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var showPembayaranDialog by remember { mutableStateOf(false) }
     var showBarcodeScanner by remember { mutableStateOf(false) }
     var tampilFormProdukBaru by remember { mutableStateOf(false) }
@@ -97,7 +98,11 @@ fun KasirScreen(
                 namaPembeliDicatat = ""
             },
             onCetak = { viewModel.tampilkanPreviewStruk(state.transaksiBerhasilId!!) },
-            onBagikan = { /* TODO Phase 3: share struk via FileProvider */ }
+            onBagikan = {
+                viewModel.buatTeksStruk(state.transaksiBerhasilId!!) { teks ->
+                    com.nada.kasir.core.util.FileShareHelper.bagikanTeks(context, teks, "Bagikan Struk Transaksi")
+                }
+            }
         )
         state.previewStruk?.let { teks ->
             StrukPreviewDialog(

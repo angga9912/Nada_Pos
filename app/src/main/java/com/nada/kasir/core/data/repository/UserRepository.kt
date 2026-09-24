@@ -19,7 +19,7 @@ class UserRepository @Inject constructor(
     /** ADMIN: Mengelola pengguna (poin 18). Password selalu di-hash dengan PBKDF2. */
     suspend fun buatPengguna(nama: String, username: String, passwordPlain: String, role: UserRole): Result<Long> {
         val bersihUsername = username.trim().lowercase()
-        if (userDao.findByUsername(bersihUsername) != null) {
+        if (userDao.findByUsernameAnyStatus(bersihUsername) != null) {
             return Result.Failure(AppError.Lainnya("Username sudah dipakai."))
         }
         if (passwordPlain.length < 6) {
@@ -42,8 +42,13 @@ class UserRepository @Inject constructor(
      * Secara otomatis meng-upgrade hash lama ke PBKDF2 saat login berhasil.
      */
     suspend fun login(username: String, passwordPlain: String): Result<UserEntity> {
-        val user = userDao.findByUsername(username.trim().lowercase())
+        val bersihUsername = username.trim().lowercase()
+        val user = userDao.findByUsernameAnyStatus(bersihUsername)
             ?: return Result.Failure(AppError.Lainnya("Username atau password salah."))
+
+        if (!user.aktif) {
+            return Result.Failure(AppError.Lainnya("Akun ini dinonaktifkan. Hubungi Administrator."))
+        }
 
         return if (PasswordHasher.verify(passwordPlain, user.passwordHash)) {
             // Auto-upgrade hash lama ke PBKDF2 tanpa mengganggu pengguna

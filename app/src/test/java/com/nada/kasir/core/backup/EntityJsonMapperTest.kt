@@ -52,4 +52,20 @@ class EntityJsonMapperTest {
 
         assertFalse("Harga beli tidak boleh pernah tampil di struk meski file backup memaksakannya", hasil.tampilkanHargaBeliStruk)
     }
+
+    @Test
+    fun `audit log bisa di-roundtrip ke json dan kembali`() {
+        val original = com.nada.kasir.core.data.local.entity.AuditLogEntity(
+            id = 12, userId = 2, aksi = "BATAL_TRANSAKSI",
+            detail = "Pembatalan transaksi INV-20260924-0001", tanggalWaktu = 1700000000000L
+        )
+        val json = EntityJsonMapper.auditLogToJson(original)
+        val hasil = EntityJsonMapper.auditLogFromJson(json)
+
+        assertEquals(original.id, hasil.id)
+        assertEquals(original.userId, hasil.userId)
+        assertEquals(original.aksi, hasil.aksi)
+        assertEquals(original.detail, hasil.detail)
+        assertEquals(original.tanggalWaktu, hasil.tanggalWaktu)
+    }
 }

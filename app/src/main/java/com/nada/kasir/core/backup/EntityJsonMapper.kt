@@ -143,6 +143,22 @@ object EntityJsonMapper {
         ukuranKertas = o.optString("ukuranKertas", "58mm"), isDefault = o.optBoolean("isDefault", false)
     )
 
+    fun auditLogToJson(a: com.nada.kasir.core.data.local.entity.AuditLogEntity) = JSONObject().apply {
+        put("id", a.id)
+        put("userId", a.userId)
+        put("aksi", a.aksi)
+        put("detail", a.detail)
+        put("tanggalWaktu", a.tanggalWaktu)
+    }
+
+    fun auditLogFromJson(o: JSONObject) = com.nada.kasir.core.data.local.entity.AuditLogEntity(
+        id = o.optLong("id", 0L),
+        userId = o.getLong("userId"),
+        aksi = o.getString("aksi"),
+        detail = o.getString("detail"),
+        tanggalWaktu = o.getLong("tanggalWaktu")
+    )
+
     fun settingToJson(s: SettingEntity) = JSONObject().apply { put("key", s.key); put("value", s.value) }
     fun settingFromJson(o: JSONObject) = SettingEntity(key = o.getString("key"), value = o.getString("value"))
 

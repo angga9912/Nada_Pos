@@ -243,6 +243,11 @@ internal fun ProdukFormDialog(
                 val hJual = maxOf(0.0, hargaJual.toDoubleOrNull() ?: 0.0)
                 val s = maxOf(0, stok.toIntOrNull() ?: 0)
                 val sMin = maxOf(0, stokMin.toIntOrNull() ?: 5)
+
+                if (!initial?.fotoPath.isNullOrBlank() && initial?.fotoPath != fotoPath) {
+                    com.nada.kasir.core.util.ProductPhotoStorageHelper.hapusFoto(initial?.fotoPath)
+                }
+
                 onSimpan(
                     ProductEntity(
                         id = initial?.id ?: 0,

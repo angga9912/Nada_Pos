@@ -313,6 +313,18 @@ class KasirViewModel @Inject constructor(
 
     fun tutupPreviewStruk() { previewStrukFlow.value = null }
 
+    /** Menghasilkan teks struk untuk dibagikan (WhatsApp, dsb). */
+    fun buatTeksStruk(transactionId: Long, onHasil: (String) -> Unit) {
+        viewModelScope.launch {
+            val store = storeRepository.getOrCreateDefault()
+            val (transaksi, items, payment) = transactionRepository.getDetail(transactionId)
+            if (transaksi != null) {
+                val teks = StrukFormatter.buatStrukPreviewText(store, transaksi, items, payment)
+                onHasil(teks)
+            }
+        }
+    }
+
     /** Dipanggil dari dialog preview saat pengguna menekan "Cetak Sekarang" (poin 8 & 9). */
     fun cetakDariPreview(transactionId: Long) {
         viewModelScope.launch {

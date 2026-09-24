@@ -16,6 +16,13 @@ import kotlinx.coroutines.launch
 import java.util.*
 import javax.inject.Inject
 
+enum class FilterRentangRiwayat(val label: String) {
+    HARI_INI("Hari Ini"),
+    TUJUH_HARI("7 Hari"),
+    BULAN_INI("Bulan Ini"),
+    SEMUA("Semua")
+}
+
 @HiltViewModel
 class RiwayatViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
@@ -26,6 +33,11 @@ class RiwayatViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val queryFlow = MutableStateFlow("")
+    val query: StateFlow<String> = queryFlow
+
+    private val filterRentangFlow = MutableStateFlow(FilterRentangRiwayat.HARI_INI)
+    val filterRentang: StateFlow<FilterRentangRiwayat> = filterRentangFlow
+
     private val previewStrukFlow = MutableStateFlow<String?>(null)
     private val transaksiIdPreviewFlow = MutableStateFlow<Long?>(null)
     private val sedangMencetakFlow = MutableStateFlow(false)
@@ -33,16 +45,43 @@ class RiwayatViewModel @Inject constructor(
     val previewStruk: StateFlow<String?> = previewStrukFlow
     val sedangMencetak: StateFlow<Boolean> = sedangMencetakFlow
 
-    // Default: filter hari ini. Filter tanggal custom bisa ditambahkan di UI (poin 13).
-    val riwayat: StateFlow<List<TransactionEntity>> = queryFlow.flatMapLatest { q ->
-        val cal = Calendar.getInstance()
-        cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0)
-        val start = cal.timeInMillis
-        val end = start + 24 * 60 * 60 * 1000L
-        transactionRepository.observeRiwayat(q, start, end)
+    val riwayat: StateFlow<List<TransactionEntity>> = combine(queryFlow, filterRentangFlow) { q, filter ->
+        Pair(q, filter)
+    }.flatMapLatest { (q, filter) ->
+        val now = System.currentTimeMillis()
+        val (start, end) = when (filter) {
+            FilterRentangRiwayat.HARI_INI -> {
+                val cal = Calendar.getInstance()
+                cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+                val s = cal.timeInMillis
+                cal.set(Calendar.HOUR_OF_DAY, 23); cal.set(Calendar.MINUTE, 59); cal.set(Calendar.SECOND, 59); cal.set(Calendar.MILLISECOND, 999)
+                Pair(s, cal.timeInMillis)
+            }
+            FilterRentangRiwayat.TUJUH_HARI -> {
+                val cal = Calendar.getInstance()
+                cal.add(Calendar.DAY_OF_YEAR, -7)
+                cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+                Pair(cal.timeInMillis, now)
+            }
+            FilterRentangRiwayat.BULAN_INI -> {
+                val cal = Calendar.getInstance()
+                cal.set(Calendar.DAY_OF_MONTH, 1)
+                cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+                val s = cal.timeInMillis
+                cal.set(Calendar.DAY_OF_MONTH, cal.getActualMaximum(Calendar.DAY_OF_MONTH))
+                cal.set(Calendar.HOUR_OF_DAY, 23); cal.set(Calendar.MINUTE, 59); cal.set(Calendar.SECOND, 59); cal.set(Calendar.MILLISECOND, 999)
+                Pair(s, cal.timeInMillis)
+            }
+            FilterRentangRiwayat.SEMUA -> {
+                Pair(0L, Long.MAX_VALUE)
+            }
+        }
+        transactionRepository.observeRiwayat(q.trim(), start, end)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun onQueryChange(q: String) { queryFlow.value = q }
+
+    fun onFilterRentangChange(filter: FilterRentangRiwayat) { filterRentangFlow.value = filter }
 
     fun batalkanTransaksi(id: Long, onError: (String) -> Unit) {
         if (!sessionManager.isAdmin()) {

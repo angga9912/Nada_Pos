@@ -68,6 +68,7 @@ class BackupManager @Inject constructor(
             val stockMovementsArr = EntityJsonMapper.listToJsonArray(stockMovementDao.getAllForBackup(), EntityJsonMapper::stockMovementToJson)
             val printersArr = EntityJsonMapper.listToJsonArray(printerDao.getAllForBackup(), EntityJsonMapper::printerToJson)
             val settingsArr = EntityJsonMapper.listToJsonArray(settingDao.getAllForBackup(), EntityJsonMapper::settingToJson)
+            val auditLogsArr = EntityJsonMapper.listToJsonArray(auditLogDao.getAllForBackup(), EntityJsonMapper::auditLogToJson)
 
             root.put("stores", storesArr)
             root.put("users", usersArr)
@@ -79,6 +80,7 @@ class BackupManager @Inject constructor(
             root.put("stockMovements", stockMovementsArr)
             root.put("printers", printersArr)
             root.put("settings", settingsArr)
+            root.put("auditLogs", auditLogsArr)
 
             // Hitung HMAC integritas untuk melindungi file dari tampering
             val hmac = hitungHmacPayload(root)
@@ -119,6 +121,7 @@ class BackupManager @Inject constructor(
         val printers = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("printers"), EntityJsonMapper::printerFromJson) } catch (e: Exception) { emptyList() }
         val rawSettings = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("settings"), EntityJsonMapper::settingFromJson) } catch (e: Exception) { emptyList() }
         val stockMovements = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("stockMovements"), EntityJsonMapper::stockMovementFromJson) } catch (e: Exception) { emptyList() }
+        val auditLogs = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("auditLogs"), EntityJsonMapper::auditLogFromJson) } catch (e: Exception) { emptyList() }
 
         // Sanitasi Pengaturan Lisensi: Jangan izinkan PRO/CUSTOM di-restore tanpa kode lisensi ECDSA sah
         val sanitizedSettings = rawSettings.toMutableList()
@@ -158,10 +161,9 @@ class BackupManager @Inject constructor(
                 if (products.isNotEmpty()) productDao.insertAll(products)
                 if (printers.isNotEmpty()) printerDao.insertAll(printers)
                 sanitizedSettings.forEach { settingDao.upsert(it) }
-                if (stockMovements.isNotEmpty()) stockMovementDao.insertAll(stockMovements)
 
+                val petaIdLamaKeBaru = mutableMapOf<Long, Long>()
                 if (transaksiJsonArray != null) {
-                    val petaIdLamaKeBaru = mutableMapOf<Long, Long>()
                     for (i in 0 until transaksiJsonArray.length()) {
                         val o = transaksiJsonArray.getJSONObject(i)
                         val idLama = EntityJsonMapper.transactionOldId(o)
@@ -188,6 +190,19 @@ class BackupManager @Inject constructor(
                         if (payments.isNotEmpty()) transactionDao.insertAllPayments(payments)
                     }
                 }
+
+                if (stockMovements.isNotEmpty()) {
+                    val mappedStockMovements = stockMovements.map { m ->
+                        if (m.referensiTransaksiId != null && petaIdLamaKeBaru.containsKey(m.referensiTransaksiId)) {
+                            m.copy(referensiTransaksiId = petaIdLamaKeBaru[m.referensiTransaksiId])
+                        } else {
+                            m
+                        }
+                    }
+                    stockMovementDao.insertAll(mappedStockMovements)
+                }
+
+                if (auditLogs.isNotEmpty()) auditLogDao.insertAll(auditLogs)
             }
             Result.Success(Unit)
         } catch (e: Exception) {
