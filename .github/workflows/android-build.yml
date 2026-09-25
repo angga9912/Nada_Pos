@@ -3,7 +3,7 @@ name: Build & Test NADA KASIR CUSTOM
 # Jalan otomatis setiap push/PR ke main, dan bisa dipicu manual dari tab Actions
 on:
   push:
-    branches: [ main, arena/01a0ccb0-nada-pos ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -51,7 +51,6 @@ jobs:
           mv "$APK_PATH" app/build/outputs/apk/demo/debug/NadaPOS.apk
 
       - name: Upload APK sebagai artifact
-        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: nada-kasir-custom-demo-debug
@@ -60,7 +59,6 @@ jobs:
 
       - name: Upload laporan unit test
         if: always()
-        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-report
@@ -99,6 +97,8 @@ jobs:
     needs: check-secrets
     runs-on: ubuntu-latest
     if: needs.check-secrets.outputs.has_keystore == 'true'
+    permissions:
+      contents: write  # dibutuhkan untuk commit+push kenaikan versi otomatis di akhir job ini
 
     steps:
       - name: Checkout kode
@@ -172,7 +172,6 @@ jobs:
           done
 
       - name: Upload APK Release FULL sebagai artifact
-        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: nada-pos-full-release-signed
@@ -181,7 +180,6 @@ jobs:
 
       - name: Upload APK Release DEMO sebagai artifact
         if: ${{ inputs.build_demo }}
-        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: nada-pos-demo-release-signed
@@ -193,9 +191,42 @@ jobs:
       # (daftar aturan yang kurang) - kirim file itu untuk diperbaiki.
       - name: Upload mapping R8 & log
         if: always()
-        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: r8-mapping-dan-log
           path: app/build/outputs/mapping/
           if-no-files-found: warn
+
+      # Dari sini ke bawah HANYA jalan kalau semua step build di atas sukses (default GitHub
+      # Actions: berhenti di step pertama yang gagal) DAN dipicu oleh push asli ke main - bukan
+      # dari "Run workflow" manual (workflow_dispatch), supaya rebuild/testing manual tidak ikut
+      # menaikkan versi. Ini permintaan pengguna: versi APK naik otomatis, tanpa diedit manual.
+      - name: Naikkan versi APK (versionCode +1, versionName patch +1)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          CURRENT_CODE=$(grep VERSION_CODE app/version.properties | cut -d'=' -f2)
+          CURRENT_NAME=$(grep VERSION_NAME app/version.properties | cut -d'=' -f2)
+          NEW_CODE=$((CURRENT_CODE + 1))
+          MAJOR_MINOR=$(echo "$CURRENT_NAME" | cut -d'.' -f1,2)
+          PATCH=$(echo "$CURRENT_NAME" | cut -d'.' -f3)
+          NEW_PATCH=$(( ${PATCH:-0} + 1 ))
+          NEW_NAME="$MAJOR_MINOR.$NEW_PATCH"
+          echo "Versi lama: $CURRENT_NAME ($CURRENT_CODE) -> versi baru: $NEW_NAME ($NEW_CODE)"
+          {
+            echo "# JANGAN diedit manual - versi di sini otomatis dinaikkan oleh GitHub Actions"
+            echo "# (job \"build-release\" di android-build.yml) setiap kali APK release berhasil dibuild"
+            echo "# dari push ke branch main. versionCode +1, versionName patch (x.y.Z) +1."
+            echo "VERSION_CODE=$NEW_CODE"
+            echo "VERSION_NAME=$NEW_NAME"
+          } > app/version.properties
+
+      - name: Commit & push versi baru ke main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add app/version.properties
+          # "[skip ci]" WAJIB ada - tanpa ini, commit otomatis ini akan memicu workflow lagi
+          # (loop tak berhenti: build -> naikkan versi -> commit -> trigger build lagi -> ...).
+          git commit -m "chore: naikkan versi otomatis setelah build release berhasil [skip ci]"
+          git push
