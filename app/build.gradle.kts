@@ -31,6 +31,16 @@ val keystoreProperties = Properties().apply {
     if (keystoreTersedia) load(FileInputStream(keystorePropertiesFile))
 }
 
+// === Versi aplikasi - dibaca dari version.properties, JANGAN diubah manual di sini ===
+// version.properties otomatis dinaikkan oleh workflow android-build.yml (job build-release)
+// setiap kali build APK release BERHASIL dari push ke main - lihat komentar di file itu.
+val versionPropertiesFile = rootProject.file("app/version.properties")
+val versionProperties = Properties().apply {
+    if (versionPropertiesFile.exists()) load(FileInputStream(versionPropertiesFile))
+}
+val appVersionCode = versionProperties.getProperty("VERSION_CODE", "1").toInt()
+val appVersionName = versionProperties.getProperty("VERSION_NAME", "1.0.0")
+
 android {
     namespace = "com.nada.kasir"
     compileSdk = 34
@@ -39,8 +49,8 @@ android {
         applicationId = "com.nada.kasir"
         minSdk = 26 // Android 8.0+. Dinaikkan dari 24 karena Apache POI (Excel) butuh MethodHandle.invoke (API 26+)
         targetSdk = 34
-        versionCode = 5
-        versionName = "2.3.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         buildConfigField("String", "LICENSE_PUBLIC_KEY", "\"$licensePublicKey\"")
     }
