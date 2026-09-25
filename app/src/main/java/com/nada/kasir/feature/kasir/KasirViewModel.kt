@@ -23,8 +23,9 @@ import javax.inject.Inject
 data class KasirUiState(
     val query: String = "",
     val produk: List<ProductEntity> = emptyList(),
-    val kategori: List<CategoryEntity> = emptyList(),
-    val kategoriTerpilih: Long? = null,
+    val kategoriList: List<CategoryEntity> = emptyList(),
+    val kategoriTerpilihId: Long? = null,
+    val store: com.nada.kasir.core.data.local.entity.StoreEntity? = null,
     val keranjang: List<KeranjangItem> = emptyList(),
     val diskonTotal: Double = 0.0,
     val errorPesan: String? = null,
@@ -80,7 +81,8 @@ class KasirViewModel @Inject constructor(
         nomorAntrianBerhasilFlow,
         barcodeBelumTerdaftarFlow,
         categoryRepository.observeAll(),
-        kategoriTerpilihFlow
+        kategoriTerpilihFlow,
+        storeRepository.observeStore()
     ) { flows ->
         @Suppress("UNCHECKED_CAST")
         KasirUiState(
@@ -94,15 +96,20 @@ class KasirViewModel @Inject constructor(
             sedangMencetak = flows[7] as Boolean,
             nomorAntrianBerhasil = flows[8] as Int?,
             barcodeBelumTerdaftar = flows[9] as String?,
-            kategori = flows[10] as List<CategoryEntity>,
-            kategoriTerpilih = flows[11] as Long?
+            kategoriList = flows[10] as List<CategoryEntity>,
+            kategoriTerpilihId = flows[11] as Long?,
+            store = flows[12] as com.nada.kasir.core.data.local.entity.StoreEntity?
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), KasirUiState())
 
     fun onQueryChange(q: String) { queryFlow.value = q }
 
-    /** Dipanggil saat kasir menyentuh chip kategori. null = chip "Semua". */
-    fun pilihKategori(categoryId: Long?) { kategoriTerpilihFlow.value = categoryId }
+    /**
+     * Dipanggil saat kasir menyentuh chip kategori. categoryId null = chip "Semua".
+     * categoryName ikut dikirim UI (buat label tampilan di sisi UI) - tidak dipakai
+     * di ViewModel karena nama kategori sudah tersedia dari [kategoriList] via id-nya.
+     */
+    fun pilihKategori(categoryId: Long?, categoryName: String) { kategoriTerpilihFlow.value = categoryId }
 
     fun tambahKeKeranjang(product: ProductEntity) {
         if (product.stok <= 0) {
@@ -228,6 +235,24 @@ class KasirViewModel @Inject constructor(
     }
 
     fun tutupPreviewStruk() { previewStrukFlow.value = null }
+
+    /**
+     * Dipakai tombol "Bagikan" di TransaksiBerhasilDialog - bangun teks struk yang sama
+     * persis dengan preview cetak (StrukFormatter.buatStrukPreviewText), lalu dikembalikan
+     * lewat callback supaya UI bisa langsung oper ke FileShareHelper.bagikanTeks tanpa
+     * perlu menampilkan dialog preview dulu.
+     */
+    fun buatTeksStruk(transactionId: Long, onSelesai: (String) -> Unit) {
+        viewModelScope.launch {
+            val store = storeRepository.getOrCreateDefault()
+            val (transaksi, items, payment) = transactionRepository.getDetail(transactionId)
+            if (transaksi == null) {
+                errorFlow.value = AppError.TransaksiGagalDisimpan.pesan
+                return@launch
+            }
+            onSelesai(StrukFormatter.buatStrukPreviewText(store, transaksi, items, payment))
+        }
+    }
 
     /** Dipanggil dari dialog preview saat pengguna menekan "Cetak Sekarang" (poin 8 & 9). */
     fun cetakDariPreview(transactionId: Long) {
