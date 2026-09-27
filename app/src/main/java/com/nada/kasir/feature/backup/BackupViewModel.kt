@@ -70,20 +70,13 @@ class BackupViewModel @Inject constructor(
         }
     }
 
-    fun restoreDariUri(context: Context, uri: Uri) {
+    fun restoreDariUri(uri: Uri) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(sedangProses = true)
-            val teks = withContext(Dispatchers.IO) {
-                try {
-                    context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                } catch (e: Exception) { null }
-            }
-            if (teks == null) {
-                _uiState.value = BackupUiState(pesan = "File backup tidak dapat dibaca.")
-                return@launch
-            }
-            when (val result = backupManager.restore(teks)) {
-                is Result.Success -> _uiState.value = BackupUiState(pesan = "Restore berhasil. Data lama telah digantikan dengan data dari backup.")
+            // Pembacaan file (JSON + foto di dalam zip) sekarang dilakukan BackupManager sendiri
+            // langsung dari uri - lihat komentar restore() di sana soal urutan validasi-dulu-baru-tulis.
+            when (val result = backupManager.restore(uri)) {
+                is Result.Success -> _uiState.value = BackupUiState(pesan = "Restore berhasil. Data lama (termasuk foto produk & logo toko) telah digantikan dengan data dari backup.")
                 is Result.Failure -> _uiState.value = BackupUiState(pesan = result.error.pesan)
             }
         }
