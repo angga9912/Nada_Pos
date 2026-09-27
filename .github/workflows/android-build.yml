@@ -3,9 +3,9 @@ name: Build & Test NADA KASIR CUSTOM
 # Jalan otomatis setiap push/PR ke main, dan bisa dipicu manual dari tab Actions
 on:
   push:
-    branches: [ main ]
+    branches: [ arema/01a0ccb0-nada-pos ]
   pull_request:
-    branches: [ main ]
+    branches: [ arema/01a0ccb0-nada-pos ]
   workflow_dispatch:
     inputs:
       build_demo:
