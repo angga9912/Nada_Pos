@@ -396,11 +396,6 @@ private fun inisialNama(nama: String): String {
 }
 
 /**
- * Baris chip kategori produk (horizontal scroll) untuk filter cepat di grid Kasir.
- * "Semua" merepresentasikan kategoriTerpilih == null. Data kategori & filter sudah ada
- * di KasirViewModel sebelumnya (pilihKategori) - baris ini murni UI yang sebelumnya belum ada.
- */
-/**
  * Area produk (search+scan, chip kategori, grid produk) - dipakai di KEDUA mode layout
  * (satu kolom & dua kolom) lewat [modifier] yang beda dari pemanggil, supaya tidak ada
  * kode dobel antara mode portrait dan mode dua-kolom.
@@ -473,54 +468,6 @@ private fun AreaProdukKasir(
                 kategori = kategoriList,
                 kategoriTerpilih = kategoriTerpilihId,
                 onPilih = onPilihKategori
-        // Area produk - full width, tidak lagi berbagi lebar dengan panel keranjang
-        Column(modifier = Modifier.weight(1f).padding(12.dp)) {
-            Row(verticalAlignment = Alignment.Top) {
-                OutlinedTextField(
-                    value = state.query,
-                    onValueChange = { teksBaru ->
-                        // Deteksi karakter baru yang masuk untuk mengenali pola ketikan scanner fisik.
-                        if (teksBaru.length > state.query.length) {
-                            val karakterBaru = teksBaru.last()
-                            if (karakterBaru == '\n') {
-                                handheldDetector.onEnterOrNewline()
-                                return@OutlinedTextField
-                            } else {
-                                handheldDetector.onCharTyped(karakterBaru)
-                            }
-                        }
-                        viewModel.onQueryChange(teksBaru)
-                    },
-                    placeholder = { Text("Cari produk atau scan barcode") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(Modifier.width(8.dp))
-                Button(
-                    onClick = { showBarcodeScanner = true },
-                    shape = RoundedCornerShape(14.dp),
-                    contentPadding = PaddingValues(horizontal = 14.dp),
-                    modifier = Modifier.height(56.dp)
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.CameraAlt, contentDescription = "Scan barcode dengan kamera", modifier = Modifier.size(18.dp))
-                        Text("Scan", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-            }
-            Text(
-                "Scan barcode menggunakan kamera HP",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 4.dp, top = 4.dp)
-            )
-            Spacer(Modifier.height(10.dp))
-            CategoryChipsRow(
-                kategori = state.kategoriList,
-                kategoriTerpilih = state.kategoriTerpilihId,
-                onPilih = { id, nama -> viewModel.pilihKategori(id, nama) }
             )
             Spacer(Modifier.height(8.dp))
         } else {
@@ -559,184 +506,6 @@ private fun AreaProdukKasir(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun CategoryChipsRow(
-    kategori: List<com.nada.kasir.core.data.local.entity.CategoryEntity>,
-    kategoriTerpilih: Long?,
-    onPilih: (Long?, String) -> Unit
-) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        item {
-            FilterChip(
-                selected = kategoriTerpilih == null,
-                onClick = { onPilih(null, "Semua") },
-                label = { Text("Semua") }
-            )
-        }
-        items(kategori, key = { it.id }) { kat ->
-            FilterChip(
-                selected = kategoriTerpilih == kat.id,
-                onClick = { onPilih(kat.id, kat.nama) },
-                label = { Text(kat.nama) }
-            )
-        }
-        // Panel keranjang - SELALU terbuka & menempel di bagian bawah layar utama, tidak lagi
-        // modal bottom sheet yang perlu disentuh dulu untuk dibuka (revisi sesuai desain mockup
-        // terbaru: keranjang + ringkasan + tombol BAYAR langsung terlihat di layar Kasir).
-        // Tinggi mengecil otomatis saat kosong ("empty cart state yang informatif" di desain
-        // mockup) supaya grid produk di atas tetap dapat ruang paling luas.
-        KeranjangPanel(
-            keranjang = state.keranjang,
-            subtotal = state.subtotal,
-            diskonTotal = state.diskonTotal,
-            total = state.total,
-            namaPembeli = namaPembeliDicatat,
-            isProsesBayar = state.isProsesBayar,
-            onUbahQty = viewModel::ubahQty,
-            onHapusItem = { productId -> viewModel.ubahQty(productId, 0) },
-            onDiskonClick = { showDiskonDialog = true },
-            onPelangganClick = { showPelangganDialog = true },
-            onBayar = { showPembayaranDialog = true }
-        )
-    }
-
-    if (showDiskonDialog) {
-        DiskonDialog(
-            diskonAwal = state.diskonTotal,
-            onDismiss = { showDiskonDialog = false },
-            onSimpan = { nilai ->
-                viewModel.setDiskonTotal(nilai)
-                showDiskonDialog = false
-            }
-        )
-    }
-
-    if (showPelangganDialog) {
-        PelangganDialog(
-            namaAwal = namaPembeliDicatat,
-            onDismiss = { showPelangganDialog = false },
-            onSimpan = { nama ->
-                namaPembeliDicatat = nama
-                showPelangganDialog = false
-            }
-        )
-    }
-
-    if (showPembayaranDialog) {
-        PembayaranDialog(
-            total = state.total,
-            namaPembeliAwal = namaPembeliDicatat,
-            onDismiss = { showPembayaranDialog = false },
-            onKonfirmasi = { metode, jumlahDiterima, namaPembeli, catatanMetode ->
-                showPembayaranDialog = false
-                viewModel.bayar(currentUserId, metode, jumlahDiterima, namaPembeli, catatanMetode)
-            }
-        )
-    }
-}
-
-/**
- * Top bar Kasir - identitas toko (logo + nama, pola sama seperti HeaderDashboard supaya
- * konsisten) plus status "Online", notifikasi & printer (placeholder, belum ada sistem
- * notifikasi/status printer real-time - sama seperti bel di Dashboard), dan avatar inisial
- * kasir yang sedang login. Warna tetap ikut branding dinamis toko (ThemeConfig), bukan hardcode.
- */
-@Composable
-private fun HeaderKasir(namaToko: String, logoPath: String?, namaPengguna: String) {
-    Column {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.primary),
-                contentAlignment = Alignment.Center
-            ) {
-                if (!logoPath.isNullOrBlank() && java.io.File(logoPath).exists()) {
-                    AsyncImage(
-                        model = java.io.File(logoPath),
-                        contentDescription = "Logo toko",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))
-                    )
-                } else {
-                    Icon(
-                        Icons.Filled.Storefront,
-                        contentDescription = null,
-                        tint = androidx.compose.ui.graphics.Color.White,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-            Spacer(Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    namaToko,
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(WarnaOnline)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text("Online", style = MaterialTheme.typography.labelSmall, color = WarnaOnline)
-                }
-            }
-            IconButton(onClick = { /* Notifikasi belum tersedia di phase ini, sama seperti Dashboard */ }, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Outlined.Notifications,
-                    contentDescription = "Notifikasi",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            IconButton(onClick = { /* Status printer real-time belum ada - atur printer di tab Pengaturan */ }, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Filled.Print,
-                    contentDescription = "Printer",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    inisialNama(namaPengguna),
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-        Divider()
-    }
-}
-
-/** Warna status "Online" - tetap konsisten terlepas dari warna branding toko (sama seperti warna status stok di Dashboard). */
-private val WarnaOnline = androidx.compose.ui.graphics.Color(0xFF2E7D32)
-
-/** Inisial 1-2 huruf dari nama pengguna untuk avatar bulat di header (mis. "Rina Kasir" -> "RK"). */
-private fun inisialNama(nama: String): String {
-    val kata = nama.trim().split(" ").filter { it.isNotBlank() }
-    return when {
-        kata.isEmpty() -> "?"
-        kata.size == 1 -> kata[0].take(2).uppercase()
-        else -> (kata[0].take(1) + kata[1].take(1)).uppercase()
     }
 }
 
@@ -975,7 +744,6 @@ private fun KeranjangPanel(
     // produk), dan daftar item ikut melar mengisi tinggi yang tersedia alih-alih
     // dibatasi 150dp seperti mode portrait yang ruangnya harus berbagi dengan grid.
     modeDuaKolom: Boolean = false
-    onBayar: () -> Unit
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -1005,12 +773,6 @@ private fun KeranjangPanel(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = if (modeDuaKolom) Modifier.weight(1f) else Modifier
                 ) {
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-            if (keranjang.isEmpty()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         Icons.Outlined.ShoppingCart,
                         contentDescription = null,
@@ -1042,11 +804,6 @@ private fun KeranjangPanel(
             // item lebih banyak dari itu, tetap bisa di-scroll di area kecil ini tanpa mendorong
             // tombol BAYAR keluar layar.
             Column(modifier = if (modeDuaKolom) Modifier.weight(1f) else Modifier.heightIn(max = 150.dp)) {
-            // Tinggi maksimum item list dikecilkan dari versi sheet (320dp -> 150dp) karena
-            // panel ini sekarang berbagi layar dengan grid produk di atasnya, bukan mengambil
-            // alih seluruh layar seperti modal. Kalau item lebih banyak dari itu, tetap bisa
-            // di-scroll di dalam area kecil ini tanpa mendorong tombol BAYAR keluar layar.
-            Column(modifier = Modifier.heightIn(max = 150.dp)) {
                 LazyColumn {
                     items(keranjang, key = { it.productId }) { item ->
                         KeranjangRow(
@@ -1066,7 +823,6 @@ private fun KeranjangPanel(
             // Mode dua-kolom: baris Subtotal disembunyikan selama belum ada diskon, karena
             // nilainya pasti sama dengan Total tepat di bawahnya (hemat ~24dp tinggi).
             if (!modeDuaKolom || diskonTotal > 0.0) RingkasanBaris("Subtotal", subtotal)
-            RingkasanBaris("Subtotal", subtotal)
             // Baris Diskon hanya muncul kalau ada nilainya, dan pakai tanda "−" manual
             // (bukan angka negatif ke CurrencyFormatter) supaya format tetap rapi "− Rp2.000".
             if (diskonTotal > 0.0) {
@@ -1117,40 +873,11 @@ private fun KeranjangPanel(
             }
 
             Spacer(Modifier.height(if (modeDuaKolom) 8.dp else 12.dp))
-
-            Spacer(Modifier.height(10.dp))
-            // Quick actions (poin desain mockup): Diskon & Pelanggan aktif sungguhan
-            // (Diskon -> viewModel.setDiskonTotal, Pelanggan -> ikut mengisi dialog
-            // Pembayaran). Catatan transaksi belum tersedia di fase ini - belum ada kolom
-            // untuk itu di data transaksi - ditampilkan tetap sesuai desain, sama seperti
-            // ikon Notifikasi/Printer di header yang juga masih placeholder.
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item {
-                    AksiCepatChip(
-                        label = if (diskonTotal > 0.0) "Diskon ${CurrencyFormatter.format(diskonTotal)}" else "+ Diskon",
-                        aktif = diskonTotal > 0.0,
-                        onClick = onDiskonClick
-                    )
-                }
-                item {
-                    AksiCepatChip(
-                        label = namaPembeli.ifBlank { "+ Pelanggan" },
-                        aktif = namaPembeli.isNotBlank(),
-                        onClick = onPelangganClick
-                    )
-                }
-                item {
-                    AksiCepatChip(label = "+ Catatan", aktif = false, onClick = {})
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
             Button(
                 onClick = onBayar,
                 enabled = keranjang.isNotEmpty() && !isProsesBayar,
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth().height(if (modeDuaKolom) 48.dp else 56.dp)
-                modifier = Modifier.fillMaxWidth().height(56.dp)
             ) {
                 if (isProsesBayar) {
                     Text("Memproses...", style = MaterialTheme.typography.titleMedium)
