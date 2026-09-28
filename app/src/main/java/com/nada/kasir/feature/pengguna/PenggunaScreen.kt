@@ -3,37 +3,73 @@ package com.nada.kasir.feature.pengguna
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.nada.kasir.core.data.local.entity.UserEntity
 import com.nada.kasir.core.data.local.entity.UserRole
+import com.nada.kasir.core.util.Result
 
 /** MANAJEMEN PENGGUNA - khusus ADMIN (poin 18: "Mengelola" akun kasir/admin). */
 @Composable
-fun PenggunaScreen(viewModel: PenggunaViewModel = hiltViewModel()) {
+fun PenggunaScreen(
+    currentUserId: Long = 1L,
+    viewModel: PenggunaViewModel = hiltViewModel()
+) {
     val daftar by viewModel.daftarPengguna.collectAsState()
-    var showForm by remember { mutableStateOf(false) }
-    var errorMsg by remember { mutableStateOf<String?>(null) }
+    var showFormTambah by remember { mutableStateOf(false) }
+    var userUntukResetPassword by remember { mutableStateOf<UserEntity?>(null) }
+    var userUntukHapus by remember { mutableStateOf<UserEntity?>(null) }
+    var pesanInfo by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         floatingActionButton = {
-            FloatingActionButton(onClick = { showForm = true }) {
+            FloatingActionButton(onClick = { showFormTambah = true }) {
                 Icon(Icons.Default.Add, contentDescription = "Tambah Pengguna")
             }
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            Text("Manajemen Pengguna", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(16.dp))
+            Text(
+                "Manajemen Pengguna",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(16.dp)
+            )
             LazyColumn {
                 items(daftar) { user ->
                     ListItem(
-                        headlineContent = { Text(user.nama) },
-                        supportingContent = { Text("${user.username} • ${user.role.name}${if (!user.aktif) " • NONAKTIF" else ""}") }
+                        headlineContent = {
+                            Text("${user.nama} ${if (user.id == currentUserId) "(Anda)" else ""}")
+                        },
+                        supportingContent = {
+                            Text("${user.username} • ${user.role.name}${if (!user.aktif) " • NONAKTIF" else ""}")
+                        },
+                        trailingContent = {
+                            Row {
+                                IconButton(
+                                    onClick = { userUntukResetPassword = user }
+                                ) {
+                                    Icon(Icons.Default.Lock, contentDescription = "Ganti Password", tint = MaterialTheme.colorScheme.primary)
+                                }
+                                if (user.id != currentUserId) {
+                                    IconButton(
+                                        onClick = { userUntukHapus = user }
+                                    ) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = MaterialTheme.colorScheme.error)
+                                    }
+                                }
+                            }
+                        }
                     )
                     Divider()
                 }
@@ -41,21 +77,71 @@ fun PenggunaScreen(viewModel: PenggunaViewModel = hiltViewModel()) {
         }
     }
 
-    if (showForm) {
+    if (showFormTambah) {
         TambahPenggunaDialog(
-            onDismiss = { showForm = false },
+            onDismiss = { showFormTambah = false },
             onSimpan = { nama, username, password, role ->
-                viewModel.tambahPengguna(nama, username, password, role) { pesan -> errorMsg = pesan }
-                showForm = false
+                viewModel.tambahPengguna(nama, username, password, role) { pesan ->
+                    pesanInfo = pesan
+                }
+                showFormTambah = false
             }
         )
     }
 
-    errorMsg?.let { pesan ->
+    userUntukResetPassword?.let { targetUser ->
+        ResetPasswordDialog(
+            targetUser = targetUser,
+            isAkunSendiri = targetUser.id == currentUserId,
+            onDismiss = { userUntukResetPassword = null },
+            onGantiSendiri = { passLama, passBaru ->
+                viewModel.gantiPassword(targetUser.id, passLama, passBaru) { res ->
+                    when (res) {
+                        is Result.Success -> pesanInfo = "Password Anda berhasil diperbarui."
+                        is Result.Failure -> pesanInfo = res.error.pesan
+                    }
+                }
+                userUntukResetPassword = null
+            },
+            onResetOlehAdmin = { passBaru ->
+                viewModel.resetPasswordOlehAdmin(targetUser.id, passBaru) { res ->
+                    when (res) {
+                        is Result.Success -> pesanInfo = "Password pengguna '${targetUser.username}' berhasil direset."
+                        is Result.Failure -> pesanInfo = res.error.pesan
+                    }
+                }
+                userUntukResetPassword = null
+            }
+        )
+    }
+
+    userUntukHapus?.let { targetUser ->
         AlertDialog(
-            onDismissRequest = { errorMsg = null },
-            confirmButton = { TextButton(onClick = { errorMsg = null }) { Text("OK") } },
-            title = { Text("Perhatian") },
+            onDismissRequest = { userUntukHapus = null },
+            title = { Text("Nonaktifkan Pengguna") },
+            text = { Text("Apakah Anda yakin ingin menonaktifkan pengguna '${targetUser.nama}' (${targetUser.username})? Pengguna yang dinonaktifkan tidak akan bisa login.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.hapusPengguna(targetUser.id, currentUserId) { res ->
+                        when (res) {
+                            is Result.Success -> pesanInfo = "Pengguna '${targetUser.username}' telah dinonaktifkan."
+                            is Result.Failure -> pesanInfo = res.error.pesan
+                        }
+                    }
+                    userUntukHapus = null
+                }) { Text("Nonaktifkan", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { userUntukHapus = null }) { Text("Batal") }
+            }
+        )
+    }
+
+    pesanInfo?.let { pesan ->
+        AlertDialog(
+            onDismissRequest = { pesanInfo = null },
+            confirmButton = { TextButton(onClick = { pesanInfo = null }) { Text("OK") } },
+            title = { Text("Pemberitahuan") },
             text = { Text(pesan) }
         )
     }
@@ -76,10 +162,33 @@ private fun TambahPenggunaDialog(
         title = { Text("Tambah Pengguna") },
         text = {
             Column {
-                OutlinedTextField(nama, { nama = it }, label = { Text("Nama") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(username, { username = it }, label = { Text("Username") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(password, { password = it }, label = { Text("Password") }, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = nama,
+                    onValueChange = { nama = it },
+                    label = { Text("Nama") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    label = { Text("Username") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Password (min 6 karakter)") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(10.dp))
+                Text("Peran (Role):", style = MaterialTheme.typography.labelMedium)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(selected = role == UserRole.KASIR, onClick = { role = UserRole.KASIR })
                     Text("Kasir")
@@ -90,7 +199,94 @@ private fun TambahPenggunaDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSimpan(nama, username, password, role) }) { Text("Simpan") }
+            TextButton(
+                onClick = { onSimpan(nama, username, password, role) },
+                enabled = nama.isNotBlank() && username.isNotBlank() && password.length >= 6
+            ) { Text("Simpan") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
+    )
+}
+
+@Composable
+private fun ResetPasswordDialog(
+    targetUser: UserEntity,
+    isAkunSendiri: Boolean,
+    onDismiss: () -> Unit,
+    onGantiSendiri: (String, String) -> Unit,
+    onResetOlehAdmin: (String) -> Unit
+) {
+    var passwordLama by remember { mutableStateOf("") }
+    var passwordBaru by remember { mutableStateOf("") }
+    var konfirmasiPassword by remember { mutableStateOf("") }
+    var errorLocal by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(if (isAkunSendiri) "Ganti Password Saya" else "Reset Password: ${targetUser.username}")
+        },
+        text = {
+            Column {
+                if (isAkunSendiri) {
+                    OutlinedTextField(
+                        value = passwordLama,
+                        onValueChange = { passwordLama = it },
+                        label = { Text("Password Saat Ini") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+                OutlinedTextField(
+                    value = passwordBaru,
+                    onValueChange = { passwordBaru = it },
+                    label = { Text("Password Baru (min 6 karakter)") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = konfirmasiPassword,
+                    onValueChange = { konfirmasiPassword = it },
+                    label = { Text("Ulangi Password Baru") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                errorLocal?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (passwordBaru.length < 6) {
+                        errorLocal = "Password baru minimal 6 karakter."
+                        return@TextButton
+                    }
+                    if (passwordBaru != konfirmasiPassword) {
+                        errorLocal = "Konfirmasi password baru tidak cocok."
+                        return@TextButton
+                    }
+                    if (isAkunSendiri) {
+                        if (passwordLama.isBlank()) {
+                            errorLocal = "Password saat ini wajib diisi."
+                            return@TextButton
+                        }
+                        onGantiSendiri(passwordLama, passwordBaru)
+                    } else {
+                        onResetOlehAdmin(passwordBaru)
+                    }
+                }
+            ) { Text("Perbarui") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
     )

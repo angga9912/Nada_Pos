@@ -205,11 +205,12 @@ fun PengaturanTokoScreen(viewModel: PengaturanTokoViewModel = hiltViewModel()) {
         Spacer(Modifier.height(24.dp))
         Button(
             onClick = {
+                val namaToko = nama.trim().ifBlank { "Toko Kita" }
                 val existing = storeDb ?: StoreEntity()
                 viewModel.simpan(
                     existing.copy(
-                        nama = nama, alamat = alamat, whatsapp = whatsapp, telepon = telepon,
-                        pemilik = pemilik, slogan = slogan, footerStruk = footer, mataUang = mataUang,
+                        nama = namaToko, alamat = alamat.trim(), whatsapp = whatsapp.trim(), telepon = telepon.trim(),
+                        pemilik = pemilik.trim(), slogan = slogan.trim(), footerStruk = footer.trim(), mataUang = mataUang.trim().ifBlank { "Rp" },
                         ukuranKertas = ukuranKertas, warnaUtama = warnaUtama,
                         tampilkanLogoStruk = tampilkanLogo, tampilkanAlamatStruk = tampilkanAlamat,
                         tampilkanWaStruk = tampilkanWa, tampilkanDiskonStruk = tampilkanDiskon,

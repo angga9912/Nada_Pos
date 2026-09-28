@@ -23,6 +23,18 @@ object KontakSupport {
         bukaWhatsApp(context, pesan)
     }
 
+    /**
+     * Minta kode aktivasi TRIAL (bukan beli langsung). Durasi "14 hari" di teks pesan
+     * ini cuma label buat penjual - kode trial-nya sendiri di-generate manual lewat
+     * workflow "Generate Kode Lisensi", jadi durasi sebenarnya ditentukan penjual saat
+     * generate, tidak dipaksa dari sini. Ganti angkanya di sini kalau kebijakan durasi
+     * trial berubah.
+     */
+    fun bukaWhatsAppTrial(context: Context, paketTujuan: PaketAplikasi) {
+        val pesan = "Halo, saya ingin coba TRIAL 14 hari Nada POS paket ${paketTujuan.label}. Boleh minta kode aktivasi trial-nya?"
+        bukaWhatsApp(context, pesan)
+    }
+
     fun bukaWhatsApp(context: Context, pesan: String) {
         val uri = Uri.parse("https://wa.me/$NOMOR_WA?text=${Uri.encode(pesan)}")
         val intent = Intent(Intent.ACTION_VIEW, uri)

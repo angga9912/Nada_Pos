@@ -3,6 +3,7 @@ package com.nada.kasir.core.di
 import android.content.Context
 import androidx.room.Room
 import com.nada.kasir.core.data.local.AppDatabase
+import com.nada.kasir.core.data.local.MIGRATION_1_2
 import com.nada.kasir.core.data.local.MIGRATION_2_3
 import com.nada.kasir.core.data.local.dao.*
 import dagger.Module
@@ -20,7 +21,7 @@ object DatabaseModule {
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
         return Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.DB_NAME)
-            .addMigrations(MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             // PENTING: setiap kali AppDatabase.version dinaikkan, WAJIB tambahkan Migration
             // eksplisit baru (lihat Migrations.kt) dan daftarkan lewat addMigrations di atas.
             // fallbackToDestructiveMigrationOnDowngrade() HANYA mengizinkan hapus-data saat versi
@@ -39,4 +40,5 @@ object DatabaseModule {
     @Provides fun provideStockMovementDao(db: AppDatabase): StockMovementDao = db.stockMovementDao()
     @Provides fun provideSettingDao(db: AppDatabase): SettingDao = db.settingDao()
     @Provides fun providePrinterDao(db: AppDatabase): PrinterDao = db.printerDao()
+    @Provides fun provideAuditLogDao(db: AppDatabase): AuditLogDao = db.auditLogDao()
 }

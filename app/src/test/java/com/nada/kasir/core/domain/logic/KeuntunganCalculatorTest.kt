@@ -28,4 +28,16 @@ class KeuntunganCalculatorTest {
         val hasil = KeuntunganCalculator.hitungTotalKeuntungan(items, emptyMap())
         assertEquals(1000.0, hasil, 0.01)
     }
+
+    @Test
+    fun `keuntungan memperhitungkan diskon transaksi tambahan pada keranjang`() {
+        val items = listOf(
+            TransactionItemEntity(transactionId = 1, productId = 10, namaProdukSnapshot = "Indomie", qty = 2, harga = 3500.0, diskon = 0.0, subtotal = 7000.0)
+        )
+        val hargaBeli = mapOf(10L to 2500.0)
+
+        // Margin kotor = (3500 - 2500) * 2 = 2000. Diskon transaksi = 500. Laba bersih = 1500.
+        val hasil = KeuntunganCalculator.hitungTotalKeuntungan(items, hargaBeli, diskonTransaksiTambahan = 500.0)
+        assertEquals(1500.0, hasil, 0.01)
+    }
 }

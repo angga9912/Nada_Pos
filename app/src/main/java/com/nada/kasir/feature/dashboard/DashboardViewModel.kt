@@ -46,51 +46,51 @@ class DashboardViewModel @Inject constructor(
     private val paketRepository: com.nada.kasir.core.paket.PaketRepository
 ) : ViewModel() {
 
-    private val cal = Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0)
+    private fun hitungRentangHariIni(): Pair<Long, Long> {
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }
+        val start = cal.timeInMillis
+        val end = start + 24 * 60 * 60 * 1000L
+        return start to end
     }
-    private val startMillis = cal.timeInMillis
-    private val endMillis = startMillis + 24 * 60 * 60 * 1000L
 
-    // Rentang 7 hari terakhir (termasuk hari ini) - untuk "Produk Populer" header Pro
-    private val start7HariMillis = Calendar.getInstance().apply {
-        timeInMillis = startMillis
-        add(Calendar.DAY_OF_YEAR, -6)
-    }.timeInMillis
-
+    private val rentangHariIniFlow = MutableStateFlow(hitungRentangHariIni())
     private val transaksiTerbaruFlow = MutableStateFlow<List<TransaksiTerbaruTampilan>>(emptyList())
     private val sedangMemuatFlow = MutableStateFlow(true)
     private val produkPopulerFlow = MutableStateFlow<List<com.nada.kasir.core.data.local.dao.ProdukTerlaris>>(emptyList())
     private val sedangMemuatProdukPopulerFlow = MutableStateFlow(true)
 
-    val uiState: StateFlow<DashboardUiState> = combine(
-        transactionRepository.observeTotalPenjualanHariIni(startMillis, endMillis),
-        transactionRepository.observeJumlahTransaksiHariIni(startMillis, endMillis),
-        productRepository.observeStokMenipis(),
-        productRepository.observeStokHabis(),
-        storeRepository.observeStore(),
-        transaksiTerbaruFlow,
-        sedangMemuatFlow,
-        paketRepository.observePaketAktif(),
-        transactionRepository.observeTotalOmzetSemuaWaktu(),
-        transactionRepository.observeTotalQtyTerjual(startMillis, endMillis),
-        produkPopulerFlow,
-        sedangMemuatProdukPopulerFlow
-    ) { flows ->
-        DashboardUiState(
-            penjualanHariIni = flows[0] as Double,
-            jumlahTransaksi = flows[1] as Int,
-            stokMenipis = (flows[2] as List<*>).size,
-            stokHabis = (flows[3] as List<*>).size,
-            store = flows[4] as StoreEntity?,
-            transaksiTerbaru = flows[5] as List<TransaksiTerbaruTampilan>,
-            sedangMemuatTransaksiTerbaru = flows[6] as Boolean,
-            paketAktif = flows[7] as com.nada.kasir.core.paket.PaketAplikasi,
-            totalOmzetSemuaWaktu = flows[8] as Double,
-            itemTerjualHariIni = flows[9] as Int,
-            produkPopuler = flows[10] as List<com.nada.kasir.core.data.local.dao.ProdukTerlaris>,
-            sedangMemuatProdukPopuler = flows[11] as Boolean
-        )
+    val uiState: StateFlow<DashboardUiState> = rentangHariIniFlow.flatMapLatest { (start, end) ->
+        combine(
+            transactionRepository.observeTotalPenjualanHariIni(start, end),
+            transactionRepository.observeJumlahTransaksiHariIni(start, end),
+            productRepository.observeStokMenipis(),
+            productRepository.observeStokHabis(),
+            storeRepository.observeStore(),
+            transaksiTerbaruFlow,
+            sedangMemuatFlow,
+            paketRepository.observePaketAktif(),
+            transactionRepository.observeTotalOmzetSemuaWaktu(),
+            transactionRepository.observeTotalQtyTerjual(start, end),
+            produkPopulerFlow,
+            sedangMemuatProdukPopulerFlow
+        ) { flows ->
+            DashboardUiState(
+                penjualanHariIni = flows[0] as Double,
+                jumlahTransaksi = flows[1] as Int,
+                stokMenipis = (flows[2] as List<*>).size,
+                stokHabis = (flows[3] as List<*>).size,
+                store = flows[4] as StoreEntity?,
+                transaksiTerbaru = flows[5] as List<TransaksiTerbaruTampilan>,
+                sedangMemuatTransaksiTerbaru = flows[6] as Boolean,
+                paketAktif = flows[7] as com.nada.kasir.core.paket.PaketAplikasi,
+                totalOmzetSemuaWaktu = flows[8] as Double,
+                itemTerjualHariIni = flows[9] as Int,
+                produkPopuler = flows[10] as List<com.nada.kasir.core.data.local.dao.ProdukTerlaris>,
+                sedangMemuatProdukPopuler = flows[11] as Boolean
+            )
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardUiState())
 
     init {
@@ -103,6 +103,9 @@ class DashboardViewModel @Inject constructor(
      * Screen tidak perlu tahu ada dua sumber data terpisah.
      */
     fun muatTransaksiTerbaru() {
+        val (startHari, endHari) = hitungRentangHariIni()
+        rentangHariIniFlow.value = startHari to endHari
+
         viewModelScope.launch {
             sedangMemuatFlow.value = true
             val sdfJam = java.text.SimpleDateFormat("HH:mm", Locale("id", "ID"))
@@ -120,7 +123,11 @@ class DashboardViewModel @Inject constructor(
         }
         viewModelScope.launch {
             sedangMemuatProdukPopulerFlow.value = true
-            produkPopulerFlow.value = transactionRepository.getProdukPopuler(start7HariMillis, endMillis, 5)
+            val start7Hari = Calendar.getInstance().apply {
+                timeInMillis = startHari
+                add(Calendar.DAY_OF_YEAR, -6)
+            }.timeInMillis
+            produkPopulerFlow.value = transactionRepository.getProdukPopuler(start7Hari, endHari, 5)
             sedangMemuatProdukPopulerFlow.value = false
         }
     }

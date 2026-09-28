@@ -29,4 +29,32 @@ class PenggunaViewModel @Inject constructor(
             }
         }
     }
+
+    fun gantiPassword(userId: Long, passwordLama: String, passwordBaru: String, onSelesai: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = userRepository.gantiPassword(userId, passwordLama, passwordBaru)
+            onSelesai(result)
+        }
+    }
+
+    fun resetPasswordOlehAdmin(targetUserId: Long, passwordBaru: String, onSelesai: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = userRepository.resetPasswordOlehAdmin(targetUserId, passwordBaru)
+            onSelesai(result)
+        }
+    }
+
+    fun hapusPengguna(targetUserId: Long, currentAdminId: Long, onSelesai: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = userRepository.hapusPengguna(targetUserId, currentAdminId)
+            onSelesai(result)
+        }
+    }
+
+    fun toggleStatusAktif(user: UserEntity, currentAdminId: Long, onSelesai: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = userRepository.setStatusAktif(user.id, !user.aktif, currentAdminId)
+            onSelesai(result)
+        }
+    }
 }

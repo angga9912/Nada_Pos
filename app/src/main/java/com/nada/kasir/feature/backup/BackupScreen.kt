@@ -27,7 +27,7 @@ fun BackupScreen(viewModel: BackupViewModel = hiltViewModel()) {
     // terpasang & pemilik toko sudah login) - tanpa aplikasi ini perlu integrasi Google Drive
     // API/OAuth apa pun secara langsung. Pengguna tinggal pilih akun & folder Drive-nya sendiri.
     val simpanKeDrive = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
+        ActivityResultContracts.CreateDocument("application/zip")
     ) { uri ->
         if (uri != null) viewModel.simpanBackupKeUri(context, uri)
     }
@@ -36,7 +36,7 @@ fun BackupScreen(viewModel: BackupViewModel = hiltViewModel()) {
         Text("Backup & Restore Data", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(4.dp))
         Text(
-            "Mencakup: Produk, Stok, Transaksi, Pengaturan Toko, Pengguna, Printer.",
+            "Mencakup: Produk (termasuk foto), Stok, Transaksi, Pengaturan Toko (termasuk logo), Pengguna, Printer.",
             style = MaterialTheme.typography.bodySmall
         )
         Spacer(Modifier.height(24.dp))
@@ -50,7 +50,7 @@ fun BackupScreen(viewModel: BackupViewModel = hiltViewModel()) {
         state.fileBackupTerakhir?.let { file ->
             Spacer(Modifier.height(8.dp))
             OutlinedButton(
-                onClick = { FileShareHelper.bagikanFile(context, file, "application/json") },
+                onClick = { FileShareHelper.bagikanFile(context, file, "application/zip") },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Bagikan File Backup") }
 
@@ -80,7 +80,7 @@ fun BackupScreen(viewModel: BackupViewModel = hiltViewModel()) {
         )
         Spacer(Modifier.height(8.dp))
         OutlinedButton(
-            onClick = { pilihFileRestore.launch(arrayOf("application/json", "*/*")) },
+            onClick = { pilihFileRestore.launch(arrayOf("application/zip", "*/*")) },
             enabled = !state.sedangProses,
             modifier = Modifier.fillMaxWidth().height(56.dp)
         ) { Text("Pilih File & Restore Data") }
@@ -93,7 +93,7 @@ fun BackupScreen(viewModel: BackupViewModel = hiltViewModel()) {
             text = { Text("Semua data saat ini akan digantikan oleh isi file backup. Lanjutkan?") },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.restoreDariUri(context, uri)
+                    viewModel.restoreDariUri(uri)
                     showKonfirmasiRestore = null
                 }) { Text("Ya, Restore") }
             },

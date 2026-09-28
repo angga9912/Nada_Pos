@@ -109,6 +109,15 @@ fun InfoPaketScreen(
                     ) {
                         Text("Upgrade ke ${paketTujuan.label} via WhatsApp")
                     }
+                    // Tombol trial sengaja pakai TextButton (bukan OutlinedButton/Button) supaya
+                    // tidak lebih menonjol dari tombol Upgrade berbayar di atasnya - trial cuma
+                    // jalan masuk, ajakan utamanya tetap ke upgrade langsung.
+                    TextButton(
+                        onClick = { KontakSupport.bukaWhatsAppTrial(context, paketTujuan) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Coba trial 14 hari ${paketTujuan.label} dulu")
+                    }
                 }
 
             if (paketAktif == PaketAplikasi.PRO) {

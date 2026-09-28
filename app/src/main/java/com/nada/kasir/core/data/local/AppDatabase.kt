@@ -37,6 +37,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun stockMovementDao(): StockMovementDao
     abstract fun settingDao(): SettingDao
     abstract fun printerDao(): PrinterDao
+    abstract fun auditLogDao(): AuditLogDao
 
     companion object {
         const val DB_NAME = "nada_kasir.db"

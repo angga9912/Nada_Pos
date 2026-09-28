@@ -4,4 +4,6 @@
          tidak butuh izin WRITE_EXTERNAL_STORAGE di Android modern -->
     <external-files-path name="export" path="export/" />
     <external-files-path name="backup" path="backup/" />
+    <files-path name="internal_files" path="." />
+    <cache-path name="internal_cache" path="." />
 </paths>

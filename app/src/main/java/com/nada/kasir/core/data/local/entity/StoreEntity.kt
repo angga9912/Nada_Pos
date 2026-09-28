@@ -10,7 +10,7 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "stores")
 data class StoreEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val nama: String = "TOKO DEMO",
+    val nama: String = "Toko Kita",
     val alamat: String = "",
     val whatsapp: String = "",
     val telepon: String = "",
@@ -21,7 +21,7 @@ data class StoreEntity(
     val mataUang: String = "Rp",
     val ukuranKertas: String = "58mm", // "58mm" atau "80mm"
     val logoPath: String? = null,
-    val warnaUtama: String = "#2E7D32",
+    val warnaUtama: String = "#1976D2",
     val tampilkanLogoStruk: Boolean = true,
     val tampilkanAlamatStruk: Boolean = true,
     val tampilkanWaStruk: Boolean = true,

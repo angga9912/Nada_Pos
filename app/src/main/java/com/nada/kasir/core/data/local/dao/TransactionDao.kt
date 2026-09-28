@@ -21,9 +21,12 @@ interface TransactionDao {
     @Query("SELECT COUNT(*) FROM transactions WHERE noTransaksi LIKE :prefix || '%'")
     suspend fun countTodayTransactions(prefix: String): Int
 
+    @Query("SELECT noTransaksi FROM transactions WHERE noTransaksi LIKE :prefix || '%' ORDER BY noTransaksi DESC LIMIT 1")
+    suspend fun getLatestTransactionNo(prefix: String): String?
+
     @Query("""
         SELECT * FROM transactions 
-        WHERE (:query = '' OR noTransaksi LIKE '%' || :query || '%')
+        WHERE (:query = '' OR noTransaksi LIKE '%' || :query || '%' OR (namaPembeli IS NOT NULL AND namaPembeli LIKE '%' || :query || '%'))
         AND tanggalWaktu BETWEEN :startMillis AND :endMillis
         ORDER BY tanggalWaktu DESC
     """)
@@ -143,6 +146,9 @@ interface TransactionDao {
     // === Nomor Antrian (reset otomatis tiap hari) ===
     @Query("SELECT COUNT(*) FROM transactions WHERE tanggalWaktu BETWEEN :start AND :end")
     suspend fun countSemuaTransaksiHariIni(start: Long, end: Long): Int
+
+    @Query("SELECT COALESCE(MAX(nomorAntrian), 0) FROM transactions WHERE tanggalWaktu BETWEEN :start AND :end")
+    suspend fun getMaxNomorAntrianHariIni(start: Long, end: Long): Int
 
 }
 

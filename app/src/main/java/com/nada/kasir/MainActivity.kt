@@ -43,8 +43,8 @@ class MainActivity : ComponentActivity() {
             val brandingViewModel: BrandingViewModel = hiltViewModel()
             val store by brandingViewModel.store.collectAsState()
 
-            // Warna aplikasi mengikuti data toko - satu source code untuk banyak pelanggan (poin 2 & 21)
-            val colorScheme = ThemeConfig.buatColorScheme(store?.warnaUtama ?: "#2E7D32")
+            // Warna aplikasi mengikuti data toko (default NADA Blue #1976D2)
+            val colorScheme = ThemeConfig.buatColorScheme(store?.warnaUtama ?: "#1976D2")
 
             MaterialTheme(colorScheme = colorScheme) {
                 Surface(modifier = Modifier) {

@@ -39,7 +39,7 @@ class ReportRepository @Inject constructor(
             jumlahTransaksi = jumlahTransaksi,
             produkTerjual = items.sumOf { it.qty },
             totalDiskon = totalDiskon,
-            estimasiKeuntungan = KeuntunganCalculator.hitungTotalKeuntungan(items, hargaBeliMap),
+            estimasiKeuntungan = KeuntunganCalculator.hitungTotalKeuntungan(items, hargaBeliMap, totalDiskon),
             produkTerlaris = produkTerlaris,
             ringkasanMetodePembayaran = ringkasanMetode
         )

@@ -36,6 +36,16 @@ class ExcelImporter(private val context: Context) {
                     return ImportProdukResult(emptyList(), emptyList(), formatSalah = true)
                 }
 
+                val headerMap = (0 until headerRow.lastCellNum).associate { i ->
+                    teksSel(headerRow, i).trim().lowercase() to i
+                }
+                val idxKode = headerMap["kode produk"] ?: 0
+                val idxBarcode = headerMap["barcode"] ?: 1
+                val idxNama = headerMap["nama produk"] ?: 2
+                val idxHargaBeli = headerMap["harga beli"] ?: 5
+                val idxHargaJual = headerMap["harga jual"] ?: 6
+                val idxStok = headerMap["stok"] ?: 7
+
                 val berhasil = mutableListOf<ProdukRowValidationResult.Valid>()
                 val gagal = mutableListOf<Pair<Int, String>>()
 
@@ -44,8 +54,12 @@ class ExcelImporter(private val context: Context) {
                     if (isRowKosong(row)) continue
 
                     val input = ProdukRowInput(
-                        kodeProduk = teksSel(row, 0), barcode = teksSel(row, 1), nama = teksSel(row, 2),
-                        hargaBeliText = teksSel(row, 5), hargaJualText = teksSel(row, 6), stokText = teksSel(row, 7)
+                        kodeProduk = teksSel(row, idxKode),
+                        barcode = teksSel(row, idxBarcode),
+                        nama = teksSel(row, idxNama),
+                        hargaBeliText = teksSel(row, idxHargaBeli),
+                        hargaJualText = teksSel(row, idxHargaJual),
+                        stokText = teksSel(row, idxStok)
                     )
                     when (val hasil = ProdukRowValidator.validasi(input)) {
                         is ProdukRowValidationResult.Valid -> berhasil.add(hasil)

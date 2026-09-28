@@ -25,4 +25,16 @@ object ProductPhotoStorageHelper {
             null
         }
     }
+
+    fun hapusFoto(fotoPath: String?) {
+        if (!fotoPath.isNullOrBlank()) {
+            try {
+                val file = File(fotoPath)
+                if (file.exists() && file.isFile) {
+                    file.delete()
+                }
+            } catch (_: Exception) {
+            }
+        }
+    }
 }

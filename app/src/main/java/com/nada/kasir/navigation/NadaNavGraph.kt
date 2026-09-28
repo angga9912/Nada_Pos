@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.nada.kasir.core.data.local.entity.UserRole
 import com.nada.kasir.core.session.SessionManager
 import com.nada.kasir.feature.backup.BackupScreen
 import com.nada.kasir.feature.dashboard.DashboardScreen
@@ -46,19 +47,23 @@ sealed class NadaRoute(val route: String) {
 }
 
 private enum class TabUtama(val label: String, val ikon: androidx.compose.ui.graphics.vector.ImageVector) {
-    HOME("Home", Icons.Filled.Home),
     KASIR("Kasir", Icons.Filled.PointOfSale),
     PRODUK("Produk", Icons.Filled.Inventory2),
+    LAPORAN("Laporan", Icons.Filled.Assessment),
     TRANSAKSI("Transaksi", Icons.Filled.ReceiptLong),
-    PENGATURAN("Pengaturan", Icons.Filled.Settings)
+    LAINNYA("Lainnya", Icons.Filled.Settings)
 }
+
+// Warna navigasi - dipakai bar bawah DAN rel samping (mode layar pendek) supaya tampilannya konsisten.
+private val WarnaNavAktif = Color(0xFF1976D2)
+private val WarnaNavIndikator = Color(0xFFE3F2FD)
+private val WarnaNavNonaktif = Color(0xFF64748B)
 
 @Composable
 fun NadaNavGraph(navController: NavHostController = rememberNavController()) {
     val context = LocalContext.current
-    // Onboarding cuma tampil SEKALI di pembukaan pertama - dicek dari SharedPreferences.
-    // remember (bukan dicek ulang tiap recomposition) supaya nggak "lompat" balik ke
-    // onboarding kalau layar lain memicu recomposition NavHost ini.
+    val sessionManager = hiltViewModelSession()
+
     val startDestination = remember {
         if (OnboardingPreference.sudahLihat(context)) NadaRoute.Login.route else NadaRoute.Onboarding.route
     }
@@ -82,15 +87,84 @@ fun NadaNavGraph(navController: NavHostController = rememberNavController()) {
         composable(NadaRoute.MainShell.route) {
             MainShell(
                 navController = navController,
-                sessionManager = hiltViewModelSession()
+                sessionManager = sessionManager
             )
         }
-        composable(NadaRoute.PengaturanPrinter.route) { PengaturanPrinterScreen() }
-        composable(NadaRoute.Backup.route) { BackupScreen() }
-        composable(NadaRoute.Laporan.route) { LaporanScreen() }
-        composable(NadaRoute.PengaturanToko.route) { PengaturanTokoScreen() }
-        composable(NadaRoute.Pengguna.route) { PenggunaScreen() }
-        composable(NadaRoute.InfoPaket.route) { InfoPaketScreen(onKembali = { navController.popBackStack() }) }
+        composable(NadaRoute.PengaturanPrinter.route) {
+            AdminRouteGuard(sessionManager, navController) {
+                PengaturanPrinterScreen()
+            }
+        }
+        composable(NadaRoute.Backup.route) {
+            AdminRouteGuard(sessionManager, navController) {
+                BackupScreen()
+            }
+        }
+        composable(NadaRoute.Laporan.route) {
+            AdminRouteGuard(sessionManager, navController) {
+                LaporanScreen()
+            }
+        }
+        composable(NadaRoute.PengaturanToko.route) {
+            AdminRouteGuard(sessionManager, navController) {
+                PengaturanTokoScreen()
+            }
+        }
+        composable(NadaRoute.Pengguna.route) {
+            AdminRouteGuard(sessionManager, navController) {
+                val currentUserId = sessionManager.currentUser.value?.id ?: 1L
+                PenggunaScreen(currentUserId = currentUserId)
+            }
+        }
+        composable(NadaRoute.InfoPaket.route) {
+            InfoPaketScreen(onKembali = { navController.popBackStack() })
+        }
+    }
+}
+
+/**
+ * Route Guard untuk membatasi akses halaman sensitif/administratif (RBAC).
+ * Jika belum login -> diarahkan ke Login.
+ * Jika login sebagai Kasir -> diblokir dengan pesan Akses Dibatasi.
+ */
+@Composable
+private fun AdminRouteGuard(
+    sessionManager: SessionManager,
+    navController: NavHostController,
+    content: @Composable () -> Unit
+) {
+    val currentUser by sessionManager.currentUser.collectAsState()
+
+    if (currentUser == null) {
+        LaunchedEffect(Unit) {
+            navController.navigate(NadaRoute.Login.route) {
+                popUpTo(0) { inclusive = true }
+            }
+        }
+    } else if (currentUser?.role != UserRole.ADMIN) {
+        Box(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "Akses Dibatasi",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.error
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Halaman ini memerlukan hak akses Administrator.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(Modifier.height(16.dp))
+                Button(onClick = { navController.popBackStack() }) {
+                    Text("Kembali")
+                }
+            }
+        }
+    } else {
+        content()
     }
 }
 
@@ -103,9 +177,8 @@ fun NadaNavGraph(navController: NavHostController = rememberNavController()) {
  */
 @Composable
 private fun MainShell(navController: NavHostController, sessionManager: SessionManager) {
-    var tabAktif by rememberSaveable { mutableStateOf(TabUtama.HOME) }
+    var tabAktif by rememberSaveable { mutableStateOf(TabUtama.KASIR) }
     val isAdmin = sessionManager.isAdmin()
-    val namaPengguna = sessionManager.currentUser.value?.nama ?: "Pengguna"
     val currentUserId = sessionManager.currentUser.value?.id ?: 1L
 
     fun logout() {
@@ -113,81 +186,106 @@ private fun MainShell(navController: NavHostController, sessionManager: SessionM
         navController.navigate(NadaRoute.Login.route) { popUpTo(0) { inclusive = true } }
     }
 
-    Scaffold(
-        bottomBar = {
-            // Bottom bar dengan tombol tengah melayang (floating) - meniru posisi tombol
-            // "scan" bulat pada referensi desain, tapi di sini dipakai untuk akses cepat
-            // ke tab Produk yang memang sudah berada di posisi tengah susunan tab.
-            Box {
-                NavigationBar {
-                    TabUtama.values().forEach { tab ->
-                        if (tab == TabUtama.PRODUK) {
-                            // Slot dikosongkan di bar rata - tombol asli untuk tab ini
-                            // ditampilkan sebagai FloatingActionButton bulat di atasnya.
-                            NavigationBarItem(
-                                selected = false,
-                                onClick = {},
-                                enabled = false,
-                                icon = {},
-                                label = {},
-                                colors = NavigationBarItemDefaults.colors(
-                                    unselectedIconColor = Color.Transparent,
-                                    indicatorColor = Color.Transparent
-                                )
-                            )
-                        } else {
+    // Isi tiap tab dipisah jadi lambda supaya bisa dipakai di dua susunan layar (bar bawah untuk
+    // layar normal, rel samping untuk layar pendek) tanpa menyalin blok `when` dua kali.
+    val isiTab: @Composable () -> Unit = {
+        when (tabAktif) {
+            TabUtama.KASIR -> KasirScreen(currentUserId = currentUserId, isAdmin = isAdmin)
+            TabUtama.PRODUK -> ProdukScreen(isAdmin = isAdmin)
+            TabUtama.LAPORAN -> {
+                if (isAdmin) {
+                    LaporanScreen(onBukaRiwayat = { tabAktif = TabUtama.TRANSAKSI })
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize().padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Laporan hanya dapat diakses oleh Administrator.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+            TabUtama.TRANSAKSI -> RiwayatScreen(isAdmin = isAdmin)
+            TabUtama.LAINNYA -> PengaturanHubScreen(
+                isAdmin = isAdmin,
+                onBukaPengaturanPrinter = { navController.navigate(NadaRoute.PengaturanPrinter.route) },
+                onBukaPengaturanToko = { navController.navigate(NadaRoute.PengaturanToko.route) },
+                onBukaPengguna = { navController.navigate(NadaRoute.Pengguna.route) },
+                onBukaBackup = { navController.navigate(NadaRoute.Backup.route) },
+                onBukaInfoPaket = { navController.navigate(NadaRoute.InfoPaket.route) },
+                onLogout = ::logout
+            )
+        }
+    }
+
+    // Layar PENDEK (tinggi < 480dp = "compact height" Material, contohnya HP dimiringkan):
+    // bar navigasi bawah memakan ~80dp dari total tinggi yang cuma ~400dp, jadi diganti rel
+    // navigasi ramping di sisi kiri - tinggi konten (grid produk, keranjang) jadi penuh dan semua
+    // tab tetap terjangkau. Layar normal (portrait, tablet) tampil persis seperti sebelumnya.
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val layarPendek = maxHeight < 480.dp
+        Scaffold(
+            bottomBar = {
+                if (!layarPendek) {
+                    NavigationBar(
+                        containerColor = Color.White,
+                        tonalElevation = 4.dp
+                    ) {
+                        TabUtama.values().forEach { tab ->
                             NavigationBarItem(
                                 selected = tabAktif == tab,
                                 onClick = { tabAktif = tab },
                                 icon = { Icon(tab.ikon, contentDescription = tab.label) },
-                                label = { Text(tab.label) }
+                                label = {
+                                    Text(
+                                        tab.label,
+                                        fontWeight = if (tabAktif == tab) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal
+                                    )
+                                },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = WarnaNavAktif,
+                                    selectedTextColor = WarnaNavAktif,
+                                    indicatorColor = WarnaNavIndikator,
+                                    unselectedIconColor = WarnaNavNonaktif,
+                                    unselectedTextColor = WarnaNavNonaktif
+                                )
                             )
                         }
                     }
                 }
-                FloatingActionButton(
-                    onClick = { tabAktif = TabUtama.PRODUK },
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .offset(y = (-26).dp)
-                        .size(56.dp),
-                    shape = CircleShape,
-                    containerColor = if (tabAktif == TabUtama.PRODUK) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = if (tabAktif == TabUtama.PRODUK) Color.White else MaterialTheme.colorScheme.onPrimaryContainer,
-                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
-                ) {
-                    Icon(TabUtama.PRODUK.ikon, contentDescription = TabUtama.PRODUK.label)
-                }
             }
-        }
-    ) { padding ->
-        androidx.compose.foundation.layout.Box(modifier = androidx.compose.ui.Modifier.padding(padding)) {
-            when (tabAktif) {
-                TabUtama.HOME -> DashboardScreen(
-                    isAdmin = isAdmin,
-                    namaPengguna = namaPengguna,
-                    onBukaKasir = { tabAktif = TabUtama.KASIR },
-                    onBukaProduk = { tabAktif = TabUtama.PRODUK },
-                    onBukaRiwayat = { tabAktif = TabUtama.TRANSAKSI },
-                    onBukaPengaturanPrinter = { navController.navigate(NadaRoute.PengaturanPrinter.route) },
-                    onBukaBackup = { navController.navigate(NadaRoute.Backup.route) },
-                    onBukaLaporan = { navController.navigate(NadaRoute.Laporan.route) },
-                    onBukaPengaturanToko = { navController.navigate(NadaRoute.PengaturanToko.route) },
-                    onBukaPengguna = { navController.navigate(NadaRoute.Pengguna.route) },
-                    onLogout = ::logout
-                )
-                TabUtama.KASIR -> KasirScreen(currentUserId = currentUserId, isAdmin = isAdmin)
-                TabUtama.PRODUK -> ProdukScreen(isAdmin = isAdmin)
-                TabUtama.TRANSAKSI -> RiwayatScreen(isAdmin = isAdmin)
-                TabUtama.PENGATURAN -> PengaturanHubScreen(
-                    isAdmin = isAdmin,
-                    onBukaPengaturanPrinter = { navController.navigate(NadaRoute.PengaturanPrinter.route) },
-                    onBukaPengaturanToko = { navController.navigate(NadaRoute.PengaturanToko.route) },
-                    onBukaPengguna = { navController.navigate(NadaRoute.Pengguna.route) },
-                    onBukaBackup = { navController.navigate(NadaRoute.Backup.route) },
-                    onBukaInfoPaket = { navController.navigate(NadaRoute.InfoPaket.route) },
-                    onLogout = ::logout
-                )
+        ) { padding ->
+            if (layarPendek) {
+                Row(modifier = Modifier.padding(padding).fillMaxSize()) {
+                    NavigationRail(containerColor = Color.White) {
+                        TabUtama.values().forEach { tab ->
+                            NavigationRailItem(
+                                selected = tabAktif == tab,
+                                onClick = { tabAktif = tab },
+                                icon = { Icon(tab.ikon, contentDescription = tab.label) },
+                                label = {
+                                    Text(
+                                        tab.label,
+                                        fontWeight = if (tabAktif == tab) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal
+                                    )
+                                },
+                                colors = NavigationRailItemDefaults.colors(
+                                    selectedIconColor = WarnaNavAktif,
+                                    selectedTextColor = WarnaNavAktif,
+                                    indicatorColor = WarnaNavIndikator,
+                                    unselectedIconColor = WarnaNavNonaktif,
+                                    unselectedTextColor = WarnaNavNonaktif
+                                )
+                            )
+                        }
+                    }
+                    Box(modifier = Modifier.weight(1f).fillMaxHeight()) { isiTab() }
+                }
+            } else {
+                Box(modifier = Modifier.padding(padding)) { isiTab() }
             }
         }
     }
