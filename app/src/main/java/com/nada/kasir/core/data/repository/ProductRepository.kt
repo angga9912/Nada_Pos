@@ -20,6 +20,10 @@ class ProductRepository @Inject constructor(
 
     fun search(query: String): Flow<List<ProductEntity>> = productDao.search(query)
 
+    /** Filter gabungan kategori (chip) + pencarian teks untuk layar Kasir. */
+    fun observeFiltered(categoryId: Long?, query: String): Flow<List<ProductEntity>> =
+        productDao.observeFiltered(categoryId, query)
+
     fun observeStokMenipis(): Flow<List<ProductEntity>> = productDao.observeStokMenipis()
 
     fun observeStokHabis(): Flow<List<ProductEntity>> = productDao.observeStokHabis()

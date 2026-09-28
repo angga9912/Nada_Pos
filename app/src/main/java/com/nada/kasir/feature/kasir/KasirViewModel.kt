@@ -8,6 +8,10 @@ import com.nada.kasir.core.data.local.entity.MetodePembayaran
 import com.nada.kasir.core.data.local.entity.ProductEntity
 import com.nada.kasir.core.data.local.entity.StoreEntity
 import com.nada.kasir.core.data.local.entity.UserEntity
+import com.nada.kasir.core.data.local.entity.CategoryEntity
+import com.nada.kasir.core.data.local.entity.MetodePembayaran
+import com.nada.kasir.core.data.local.entity.ProductEntity
+import com.nada.kasir.core.data.repository.CategoryRepository
 import com.nada.kasir.core.data.repository.PrinterRepository
 import com.nada.kasir.core.data.repository.ProductRepository
 import com.nada.kasir.core.data.repository.StoreRepository
@@ -26,6 +30,9 @@ import javax.inject.Inject
 data class KasirUiState(
     val query: String = "",
     val produk: List<ProductEntity> = emptyList(),
+    val kategoriList: List<CategoryEntity> = emptyList(),
+    val kategoriTerpilihId: Long? = null,
+    val store: com.nada.kasir.core.data.local.entity.StoreEntity? = null,
     val keranjang: List<KeranjangItem> = emptyList(),
     val diskonTotal: Double = 0.0,
     val errorPesan: String? = null,
@@ -53,6 +60,7 @@ data class KasirUiState(
 @HiltViewModel
 class KasirViewModel @Inject constructor(
     private val productRepository: ProductRepository,
+    private val categoryRepository: CategoryRepository,
     private val transactionRepository: TransactionRepository,
     private val storeRepository: StoreRepository,
     private val printerRepository: PrinterRepository,
@@ -62,6 +70,7 @@ class KasirViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val queryFlow = MutableStateFlow("")
+    private val kategoriTerpilihFlow = MutableStateFlow<Long?>(null)
     private val keranjangFlow = MutableStateFlow<List<KeranjangItem>>(emptyList())
     private val diskonFlow = MutableStateFlow(0.0)
     private val errorFlow = MutableStateFlow<String?>(null)
@@ -80,8 +89,15 @@ class KasirViewModel @Inject constructor(
     private val printerAdaFlow: Flow<Boolean> = printerRepository.observeAll().map { it.isNotEmpty() }
 
     @Suppress("UNCHECKED_CAST")
+    // Query teks & kategori terpilih digabung dulu (poin desain mockup: chip kategori & search
+    // bar aktif bersamaan) baru di-flatMapLatest ke satu query DAO gabungan - supaya ganti
+    // kategori/ketik cari sama-sama langsung refresh grid produk, tidak saling menimpa.
+    private val produkTerfilterFlow: Flow<List<ProductEntity>> =
+        combine(queryFlow, kategoriTerpilihFlow) { query, categoryId -> query.trim() to categoryId }
+            .flatMapLatest { (query, categoryId) -> productRepository.observeFiltered(categoryId, query) }
+
     val uiState: StateFlow<KasirUiState> = combine(
-        queryFlow.flatMapLatest { q -> if (q.isBlank()) productRepository.observeActive() else productRepository.search(q) },
+        produkTerfilterFlow,
         keranjangFlow,
         diskonFlow,
         errorFlow,
@@ -98,6 +114,9 @@ class KasirViewModel @Inject constructor(
         catatanTransaksiFlow,
         printerAdaFlow,
         sessionManager.currentUser
+        categoryRepository.observeAll(),
+        kategoriTerpilihFlow,
+        storeRepository.observeStore()
     ) { flows ->
         val rawProduk = flows[0] as List<ProductEntity>
         val keranjang = flows[1] as List<KeranjangItem>
@@ -152,6 +171,19 @@ class KasirViewModel @Inject constructor(
             catatanTransaksi = catatanTransaksi,
             printerTersedia = printerTersedia,
             cashierName = user?.nama ?: "Kasir"
+            produk = flows[0] as List<ProductEntity>,
+            keranjang = flows[1] as List<KeranjangItem>,
+            diskonTotal = flows[2] as Double,
+            errorPesan = flows[3] as String?,
+            transaksiBerhasilId = flows[4] as Long?,
+            isProsesBayar = flows[5] as Boolean,
+            previewStruk = flows[6] as String?,
+            sedangMencetak = flows[7] as Boolean,
+            nomorAntrianBerhasil = flows[8] as Int?,
+            barcodeBelumTerdaftar = flows[9] as String?,
+            kategoriList = flows[10] as List<CategoryEntity>,
+            kategoriTerpilihId = flows[11] as Long?,
+            store = flows[12] as com.nada.kasir.core.data.local.entity.StoreEntity?
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), KasirUiState())
 
@@ -181,6 +213,12 @@ class KasirViewModel @Inject constructor(
         namaPelangganFlow.value = ""
         catatanTransaksiFlow.value = ""
     }
+    /**
+     * Dipanggil saat kasir menyentuh chip kategori. categoryId null = chip "Semua".
+     * categoryName ikut dikirim UI (buat label tampilan di sisi UI) - tidak dipakai
+     * di ViewModel karena nama kategori sudah tersedia dari [kategoriList] via id-nya.
+     */
+    fun pilihKategori(categoryId: Long?, categoryName: String) { kategoriTerpilihFlow.value = categoryId }
 
     fun tambahKeKeranjang(product: ProductEntity) {
         if (product.stok <= 0) {
@@ -322,6 +360,21 @@ class KasirViewModel @Inject constructor(
                 val teks = StrukFormatter.buatStrukPreviewText(store, transaksi, items, payment)
                 onHasil(teks)
             }
+    /**
+     * Dipakai tombol "Bagikan" di TransaksiBerhasilDialog - bangun teks struk yang sama
+     * persis dengan preview cetak (StrukFormatter.buatStrukPreviewText), lalu dikembalikan
+     * lewat callback supaya UI bisa langsung oper ke FileShareHelper.bagikanTeks tanpa
+     * perlu menampilkan dialog preview dulu.
+     */
+    fun buatTeksStruk(transactionId: Long, onSelesai: (String) -> Unit) {
+        viewModelScope.launch {
+            val store = storeRepository.getOrCreateDefault()
+            val (transaksi, items, payment) = transactionRepository.getDetail(transactionId)
+            if (transaksi == null) {
+                errorFlow.value = AppError.TransaksiGagalDisimpan.pesan
+                return@launch
+            }
+            onSelesai(StrukFormatter.buatStrukPreviewText(store, transaksi, items, payment))
         }
     }
 
