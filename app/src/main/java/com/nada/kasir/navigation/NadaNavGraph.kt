@@ -54,6 +54,11 @@ private enum class TabUtama(val label: String, val ikon: androidx.compose.ui.gra
     LAINNYA("Lainnya", Icons.Filled.Settings)
 }
 
+// Warna navigasi - dipakai bar bawah DAN rel samping (mode layar pendek) supaya tampilannya konsisten.
+private val WarnaNavAktif = Color(0xFF1976D2)
+private val WarnaNavIndikator = Color(0xFFE3F2FD)
+private val WarnaNavNonaktif = Color(0xFF64748B)
+
 @Composable
 fun NadaNavGraph(navController: NavHostController = rememberNavController()) {
     val context = LocalContext.current
@@ -181,65 +186,106 @@ private fun MainShell(navController: NavHostController, sessionManager: SessionM
         navController.navigate(NadaRoute.Login.route) { popUpTo(0) { inclusive = true } }
     }
 
-    Scaffold(
-        bottomBar = {
-            NavigationBar(
-                containerColor = Color.White,
-                tonalElevation = 4.dp
-            ) {
-                TabUtama.values().forEach { tab ->
-                    NavigationBarItem(
-                        selected = tabAktif == tab,
-                        onClick = { tabAktif = tab },
-                        icon = { Icon(tab.ikon, contentDescription = tab.label) },
-                        label = {
-                            Text(
-                                tab.label,
-                                fontWeight = if (tabAktif == tab) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color(0xFF1976D2),
-                            selectedTextColor = Color(0xFF1976D2),
-                            indicatorColor = Color(0xFFE3F2FD),
-                            unselectedIconColor = Color(0xFF64748B),
-                            unselectedTextColor = Color(0xFF64748B)
+    // Isi tiap tab dipisah jadi lambda supaya bisa dipakai di dua susunan layar (bar bawah untuk
+    // layar normal, rel samping untuk layar pendek) tanpa menyalin blok `when` dua kali.
+    val isiTab: @Composable () -> Unit = {
+        when (tabAktif) {
+            TabUtama.KASIR -> KasirScreen(currentUserId = currentUserId, isAdmin = isAdmin)
+            TabUtama.PRODUK -> ProdukScreen(isAdmin = isAdmin)
+            TabUtama.LAPORAN -> {
+                if (isAdmin) {
+                    LaporanScreen(onBukaRiwayat = { tabAktif = TabUtama.TRANSAKSI })
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize().padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Laporan hanya dapat diakses oleh Administrator.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error
                         )
-                    )
+                    }
                 }
             }
+            TabUtama.TRANSAKSI -> RiwayatScreen(isAdmin = isAdmin)
+            TabUtama.LAINNYA -> PengaturanHubScreen(
+                isAdmin = isAdmin,
+                onBukaPengaturanPrinter = { navController.navigate(NadaRoute.PengaturanPrinter.route) },
+                onBukaPengaturanToko = { navController.navigate(NadaRoute.PengaturanToko.route) },
+                onBukaPengguna = { navController.navigate(NadaRoute.Pengguna.route) },
+                onBukaBackup = { navController.navigate(NadaRoute.Backup.route) },
+                onBukaInfoPaket = { navController.navigate(NadaRoute.InfoPaket.route) },
+                onLogout = ::logout
+            )
         }
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding)) {
-            when (tabAktif) {
-                TabUtama.KASIR -> KasirScreen(currentUserId = currentUserId, isAdmin = isAdmin)
-                TabUtama.PRODUK -> ProdukScreen(isAdmin = isAdmin)
-                TabUtama.LAPORAN -> {
-                    if (isAdmin) {
-                        LaporanScreen(onBukaRiwayat = { tabAktif = TabUtama.TRANSAKSI })
-                    } else {
-                        Box(
-                            modifier = Modifier.fillMaxSize().padding(24.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "Laporan hanya dapat diakses oleh Administrator.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error
+    }
+
+    // Layar PENDEK (tinggi < 480dp = "compact height" Material, contohnya HP dimiringkan):
+    // bar navigasi bawah memakan ~80dp dari total tinggi yang cuma ~400dp, jadi diganti rel
+    // navigasi ramping di sisi kiri - tinggi konten (grid produk, keranjang) jadi penuh dan semua
+    // tab tetap terjangkau. Layar normal (portrait, tablet) tampil persis seperti sebelumnya.
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val layarPendek = maxHeight < 480.dp
+        Scaffold(
+            bottomBar = {
+                if (!layarPendek) {
+                    NavigationBar(
+                        containerColor = Color.White,
+                        tonalElevation = 4.dp
+                    ) {
+                        TabUtama.values().forEach { tab ->
+                            NavigationBarItem(
+                                selected = tabAktif == tab,
+                                onClick = { tabAktif = tab },
+                                icon = { Icon(tab.ikon, contentDescription = tab.label) },
+                                label = {
+                                    Text(
+                                        tab.label,
+                                        fontWeight = if (tabAktif == tab) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal
+                                    )
+                                },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = WarnaNavAktif,
+                                    selectedTextColor = WarnaNavAktif,
+                                    indicatorColor = WarnaNavIndikator,
+                                    unselectedIconColor = WarnaNavNonaktif,
+                                    unselectedTextColor = WarnaNavNonaktif
+                                )
                             )
                         }
                     }
                 }
-                TabUtama.TRANSAKSI -> RiwayatScreen(isAdmin = isAdmin)
-                TabUtama.LAINNYA -> PengaturanHubScreen(
-                    isAdmin = isAdmin,
-                    onBukaPengaturanPrinter = { navController.navigate(NadaRoute.PengaturanPrinter.route) },
-                    onBukaPengaturanToko = { navController.navigate(NadaRoute.PengaturanToko.route) },
-                    onBukaPengguna = { navController.navigate(NadaRoute.Pengguna.route) },
-                    onBukaBackup = { navController.navigate(NadaRoute.Backup.route) },
-                    onBukaInfoPaket = { navController.navigate(NadaRoute.InfoPaket.route) },
-                    onLogout = ::logout
-                )
+            }
+        ) { padding ->
+            if (layarPendek) {
+                Row(modifier = Modifier.padding(padding).fillMaxSize()) {
+                    NavigationRail(containerColor = Color.White) {
+                        TabUtama.values().forEach { tab ->
+                            NavigationRailItem(
+                                selected = tabAktif == tab,
+                                onClick = { tabAktif = tab },
+                                icon = { Icon(tab.ikon, contentDescription = tab.label) },
+                                label = {
+                                    Text(
+                                        tab.label,
+                                        fontWeight = if (tabAktif == tab) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal
+                                    )
+                                },
+                                colors = NavigationRailItemDefaults.colors(
+                                    selectedIconColor = WarnaNavAktif,
+                                    selectedTextColor = WarnaNavAktif,
+                                    indicatorColor = WarnaNavIndikator,
+                                    unselectedIconColor = WarnaNavNonaktif,
+                                    unselectedTextColor = WarnaNavNonaktif
+                                )
+                            )
+                        }
+                    }
+                    Box(modifier = Modifier.weight(1f).fillMaxHeight()) { isiTab() }
+                }
+            } else {
+                Box(modifier = Modifier.padding(padding)) { isiTab() }
             }
         }
     }
