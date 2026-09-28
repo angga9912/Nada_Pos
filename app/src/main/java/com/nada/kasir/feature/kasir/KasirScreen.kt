@@ -641,7 +641,12 @@ private fun KeranjangPanel(
         } else {
             RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
         },
-        modifier = Modifier.fillMaxWidth().then(modifier)
+        // PENTING: modifier dari pemanggil harus di DEPAN (luar), fillMaxWidth() belakangan
+        // (dalam) - bukan sebaliknya. Kalau fillMaxWidth() ditulis duluan, dia sudah keburu
+        // "mengunci" lebar penuh Row SEBELUM modifier.width(380.dp) dari pemanggil sempat
+        // berlaku, akibatnya di mode dua-kolom panel ini melebar penuh dan menutupi
+        // AreaProdukKasir (persis bug yang bikin grid produk hilang total di layar lebar).
+        modifier = modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier.fillMaxWidth()
