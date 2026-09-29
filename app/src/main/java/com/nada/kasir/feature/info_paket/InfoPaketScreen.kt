@@ -50,6 +50,7 @@ fun InfoPaketScreen(
     viewModel: InfoPaketViewModel = hiltViewModel()
 ) {
     val paketAktif by viewModel.paketAktif.collectAsState()
+    val jumlahTransaksiHariIni by viewModel.jumlahTransaksiHariIni.collectAsState()
     val context = LocalContext.current
 
     Scaffold(
@@ -80,6 +81,25 @@ fun InfoPaketScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            // Konteks pemakaian nyata - cuma relevan buat paket Basic (yang jadi sasaran
+            // ajakan upgrade). Angkanya sama dengan yang dipakai banner saran upgrade di
+            // layar Kasir, supaya konsisten di mana pun pemilik toko melihatnya.
+            if (paketAktif == PaketAplikasi.BASIC) {
+                Spacer(Modifier.height(12.dp))
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "Hari ini toko kamu sudah $jumlahTransaksiHariIni transaksi",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                    )
+                }
+            }
 
             Spacer(Modifier.height(20.dp))
 
