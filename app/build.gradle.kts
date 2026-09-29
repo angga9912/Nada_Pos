@@ -64,19 +64,24 @@ android {
         // (BASIC gratis; PRO/CUSTOM terbuka setelah kode aktivasi dimasukkan).
         create("full") {
             dimension = "client"
-            resValue("string", "app_name", "NADA POS")
+            // Nama aplikasi (label di launcher/home screen) ikut menampilkan versi, diambil
+            // dari appVersionName yang sudah dibaca dari version.properties di atas - jadi
+            // setiap kali workflow android-build.yml menaikkan versi otomatis, nama aplikasi
+            // yang terpasang juga otomatis berubah, TANPA perlu diedit manual di sini.
+            resValue("string", "app_name", "NADA POS v$appVersionName")
         }
         // DEMO = versi coba, package terpisah (com.nada.kasir.demo) sehingga bisa terpasang
-        // berdampingan dengan versi full di HP yang sama.
+        // berdampingan dengan versi full di HP yang sama. Ditambah label "DEMO" supaya kedua
+        // ikon aplikasi di launcher tidak terlihat identik saat sama-sama terpasang.
         create("demo") {
             dimension = "client"
             applicationIdSuffix = ".demo"
-            resValue("string", "app_name", "NADA POS")
+            resValue("string", "app_name", "NADA POS DEMO v$appVersionName")
         }
         // create("tokoMakmur") {
         //     dimension = "client"
         //     applicationIdSuffix = ".tokomakmur"
-        //     resValue("string", "app_name", "KASIR TOKO MAKMUR")
+        //     resValue("string", "app_name", "KASIR TOKO MAKMUR v$appVersionName")
         // }
     }
 
