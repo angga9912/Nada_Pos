@@ -190,7 +190,11 @@ private fun MainShell(navController: NavHostController, sessionManager: SessionM
     // layar normal, rel samping untuk layar pendek) tanpa menyalin blok `when` dua kali.
     val isiTab: @Composable () -> Unit = {
         when (tabAktif) {
-            TabUtama.KASIR -> KasirScreen(currentUserId = currentUserId, isAdmin = isAdmin)
+            TabUtama.KASIR -> KasirScreen(
+                currentUserId = currentUserId,
+                isAdmin = isAdmin,
+                onBukaInfoPaket = { navController.navigate(NadaRoute.InfoPaket.route) }
+            )
             TabUtama.PRODUK -> ProdukScreen(isAdmin = isAdmin)
             TabUtama.LAPORAN -> {
                 if (isAdmin) {
