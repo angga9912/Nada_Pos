@@ -5,13 +5,14 @@ import androidx.lifecycle.viewModelScope
 import com.nada.kasir.core.data.local.entity.CategoryEntity
 import com.nada.kasir.core.data.local.entity.MetodePembayaran
 import com.nada.kasir.core.data.local.entity.ProductEntity
-import com.nada.kasir.core.data.local.entity.StoreEntity
 import com.nada.kasir.core.data.repository.CategoryRepository
 import com.nada.kasir.core.data.repository.PrinterRepository
 import com.nada.kasir.core.data.repository.ProductRepository
 import com.nada.kasir.core.data.repository.StoreRepository
 import com.nada.kasir.core.data.repository.TransactionRepository
 import com.nada.kasir.core.domain.model.KeranjangItem
+import com.nada.kasir.core.paket.PaketAplikasi
+import com.nada.kasir.core.paket.PaketRepository
 import com.nada.kasir.core.printer.BluetoothPrinterManager
 import com.nada.kasir.core.printer.StrukFormatter
 import com.nada.kasir.core.util.AppError
@@ -19,14 +20,27 @@ import com.nada.kasir.core.util.Result
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
+
+/**
+ * Ambang jumlah transaksi SELESAI dalam 1 hari yang memicu banner saran upgrade (bukan blokir -
+ * lihat diskusi: hard limit transaksi harian di paket Basic sengaja TIDAK dipakai karena
+ * berisiko menghentikan toko yang justru lagi ramai, dan gampang diakali cuma dengan memundurkan
+ * tanggal HP karena aplikasi ini offline total tanpa server). Banner ini murni ajakan lembut,
+ * kasir tetap bisa lanjut transaksi seperti biasa walau banner tidak ditutup/diabaikan.
+ */
+private const val AMBANG_TRANSAKSI_HARIAN_UNTUK_SARAN = 50
 
 data class KasirUiState(
     val query: String = "",
     val produk: List<ProductEntity> = emptyList(),
     val kategoriList: List<CategoryEntity> = emptyList(),
     val kategoriTerpilihId: Long? = null,
-    val store: StoreEntity? = null,
+    val store: com.nada.kasir.core.data.local.entity.StoreEntity? = null,
     val keranjang: List<KeranjangItem> = emptyList(),
     val diskonTotal: Double = 0.0,
     val errorPesan: String? = null,
@@ -36,12 +50,11 @@ data class KasirUiState(
     val previewStruk: String? = null,
     val sedangMencetak: Boolean = false,
     val barcodeBelumTerdaftar: String? = null,
-    val namaPelanggan: String = "",
-    val catatanTransaksi: String = ""
+    val jumlahTransaksiHariIni: Int = 0,
+    val tampilkanSaranUpgrade: Boolean = false
 ) {
     val subtotal: Double get() = keranjang.sumOf { it.harga * it.qty }
-    val total: Double get() = (subtotal - diskonTotal).coerceAtLeast(0.0)
-    val totalItemCount: Int get() = keranjang.sumOf { it.qty }
+    val total: Double get() = subtotal - diskonTotal
 }
 
 @HiltViewModel
@@ -49,6 +62,7 @@ class KasirViewModel @Inject constructor(
     private val productRepository: ProductRepository,
     private val categoryRepository: CategoryRepository,
     private val transactionRepository: TransactionRepository,
+    private val paketRepository: PaketRepository,
     private val storeRepository: StoreRepository,
     private val printerRepository: PrinterRepository,
     private val bluetoothPrinterManager: BluetoothPrinterManager
@@ -65,8 +79,6 @@ class KasirViewModel @Inject constructor(
     private val previewStrukFlow = MutableStateFlow<String?>(null)
     private val sedangMencetakFlow = MutableStateFlow(false)
     private val barcodeBelumTerdaftarFlow = MutableStateFlow<String?>(null)
-    private val namaPelangganFlow = MutableStateFlow("")
-    private val catatanTransaksiFlow = MutableStateFlow("")
 
     // Query teks & kategori terpilih digabung dulu (poin desain mockup: chip kategori & search
     // bar aktif bersamaan) baru di-flatMapLatest ke satu query DAO gabungan - supaya ganti
@@ -75,7 +87,6 @@ class KasirViewModel @Inject constructor(
         combine(queryFlow, kategoriTerpilihFlow) { query, categoryId -> query.trim() to categoryId }
             .flatMapLatest { (query, categoryId) -> productRepository.observeFiltered(categoryId, query) }
 
-    @Suppress("UNCHECKED_CAST")
     val uiState: StateFlow<KasirUiState> = combine(
         produkTerfilterFlow,
         keranjangFlow,
@@ -90,10 +101,14 @@ class KasirViewModel @Inject constructor(
         categoryRepository.observeAll(),
         kategoriTerpilihFlow,
         storeRepository.observeStore(),
-        namaPelangganFlow,
-        catatanTransaksiFlow,
-        queryFlow
+        transactionRepository.observeJumlahTransaksiHariIni(awalHariIniMillis(), akhirHariIniMillis()),
+        paketRepository.observePaketAktif(),
+        paketRepository.observeSaranUpgradeDismissedTanggal()
     ) { flows ->
+        @Suppress("UNCHECKED_CAST")
+        val jumlahTransaksiHariIni = flows[13] as Int
+        val paketAktif = flows[14] as PaketAplikasi
+        val dismissedTanggal = flows[15] as String?
         KasirUiState(
             produk = flows[0] as List<ProductEntity>,
             keranjang = flows[1] as List<KeranjangItem>,
@@ -107,36 +122,34 @@ class KasirViewModel @Inject constructor(
             barcodeBelumTerdaftar = flows[9] as String?,
             kategoriList = flows[10] as List<CategoryEntity>,
             kategoriTerpilihId = flows[11] as Long?,
-            store = flows[12] as StoreEntity?,
-            namaPelanggan = flows[13] as String,
-            catatanTransaksi = flows[14] as String,
-            query = flows[15] as String
+            store = flows[12] as com.nada.kasir.core.data.local.entity.StoreEntity?,
+            jumlahTransaksiHariIni = jumlahTransaksiHariIni,
+            // Cuma tampil kalau: masih Basic (Custom/Pro tidak perlu diajak upgrade lagi),
+            // sudah lewat ambang harian, DAN belum ditutup kasir HARI ini juga.
+            tampilkanSaranUpgrade = paketAktif == PaketAplikasi.BASIC &&
+                jumlahTransaksiHariIni >= AMBANG_TRANSAKSI_HARIAN_UNTUK_SARAN &&
+                dismissedTanggal != tanggalHariIniString()
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), KasirUiState())
 
+    private fun tanggalHariIniString(): String =
+        SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
+
+    private fun awalHariIniMillis(): Long = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    private fun akhirHariIniMillis(): Long = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59); set(Calendar.MILLISECOND, 999)
+    }.timeInMillis
+
+    /** Dipanggil saat kasir menutup (×) banner saran upgrade - tidak muncul lagi HARI ini saja. */
+    fun dismissSaranUpgrade() {
+        viewModelScope.launch { paketRepository.dismissSaranUpgradeHariIni(tanggalHariIniString()) }
+    }
 
     fun onQueryChange(q: String) { queryFlow.value = q }
 
-    fun setNamaPelanggan(nama: String) {
-        namaPelangganFlow.value = nama
-    }
-
-    fun setCatatan(catatan: String) {
-        catatanTransaksiFlow.value = catatan
-    }
-
-    fun hapusItemKeranjang(productId: Long) {
-        val current = keranjangFlow.value.toMutableList()
-        current.removeAll { it.productId == productId }
-        keranjangFlow.value = current
-    }
-
-    fun kosongkanKeranjang() {
-        keranjangFlow.value = emptyList()
-        diskonFlow.value = 0.0
-        namaPelangganFlow.value = ""
-        catatanTransaksiFlow.value = ""
-    }
     /**
      * Dipanggil saat kasir menyentuh chip kategori. categoryId null = chip "Semua".
      * categoryName ikut dikirim UI (buat label tampilan di sisi UI) - tidak dipakai
@@ -219,17 +232,14 @@ class KasirViewModel @Inject constructor(
     fun bayar(userId: Long, metode: MetodePembayaran, jumlahDiterima: Double, namaPembeli: String? = null, catatanMetode: String? = null) {
         viewModelScope.launch {
             prosesBayarFlow.value = true
-            val finalNamaPembeli = namaPembeli?.ifBlank { null } ?: namaPelangganFlow.value.ifBlank { null }
-            val finalCatatan = catatanMetode?.ifBlank { null } ?: catatanTransaksiFlow.value.ifBlank { null }
-
             val result = transactionRepository.simpanTransaksiKasir(
                 userId = userId,
                 items = keranjangFlow.value,
                 diskonTotal = diskonFlow.value,
                 metode = metode,
                 jumlahDiterima = jumlahDiterima,
-                namaPembeli = finalNamaPembeli,
-                catatanMetode = finalCatatan
+                namaPembeli = namaPembeli,
+                catatanMetode = catatanMetode
             )
             prosesBayarFlow.value = false
             when (result) {
@@ -239,8 +249,6 @@ class KasirViewModel @Inject constructor(
                     nomorAntrianBerhasilFlow.value = transaksi?.nomorAntrian
                     keranjangFlow.value = emptyList()
                     diskonFlow.value = 0.0
-                    namaPelangganFlow.value = ""
-                    catatanTransaksiFlow.value = ""
                 }
                 is Result.Failure -> {
                     errorFlow.value = result.error.pesan
@@ -254,12 +262,11 @@ class KasirViewModel @Inject constructor(
         nomorAntrianBerhasilFlow.value = null
         keranjangFlow.value = emptyList()
         diskonFlow.value = 0.0
-        namaPelangganFlow.value = ""
-        catatanTransaksiFlow.value = ""
     }
 
     /**
-     * Tampilkan PREVIEW struk dulu sebelum benar-benar mencetak.
+     * Tampilkan PREVIEW struk dulu sebelum benar-benar mencetak. Tidak menyentuh
+     * printer sama sekali di langkah ini - murni menyusun teks dari data toko & transaksi.
      */
     fun tampilkanPreviewStruk(transactionId: Long) {
         viewModelScope.launch {

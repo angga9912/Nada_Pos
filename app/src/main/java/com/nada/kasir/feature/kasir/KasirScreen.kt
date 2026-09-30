@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Search
@@ -54,6 +55,7 @@ fun KasirScreen(
     currentUserId: Long,
     isAdmin: Boolean = false,
     namaPengguna: String = "Kasir",
+    onBukaInfoPaket: () -> Unit = {},
     viewModel: KasirViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -224,6 +226,19 @@ fun KasirScreen(
                 }
             } else {
                 Column(modifier = Modifier.fillMaxSize()) {
+                    // Banner saran upgrade (ajakan lembut, BUKAN blokir) - cuma tampil di mode
+                    // satu-kolom/portrait, sengaja tidak ditaruh di mode dua-kolom/landscape
+                    // supaya tidak menghimpit lagi tinggi konten yang baru dirapikan. Logika
+                    // kapan tampil (paket Basic + lewat ambang transaksi harian + belum ditutup
+                    // hari ini) sepenuhnya di KasirViewModel, lihat AMBANG_TRANSAKSI_HARIAN_UNTUK_SARAN.
+                    if (state.tampilkanSaranUpgrade) {
+                        SaranUpgradeBanner(
+                            jumlahTransaksi = state.jumlahTransaksiHariIni,
+                            onLihatPaket = onBukaInfoPaket,
+                            onTutup = viewModel::dismissSaranUpgrade,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
                     AreaProdukKasir(
                         query = state.query,
                         kategoriList = state.kategoriList,
@@ -300,6 +315,53 @@ fun KasirScreen(
  * kasir yang sedang login. Warna tetap ikut branding dinamis toko (ThemeConfig), bukan hardcode.
  */
 @Composable
+/**
+ * Banner ajakan upgrade yang LEMBUT - muncul saat toko (paket Basic) ramai hari ini, tapi
+ * TIDAK PERNAH memblokir transaksi. Kasir tetap bebas lanjut jualan seperti biasa baik banner
+ * ditutup maupun dibiarkan. Ditutup = tidak muncul lagi hari ini saja (lihat
+ * KasirViewModel.dismissSaranUpgrade), otomatis muncul lagi besok kalau ramai lagi.
+ */
+@Composable
+private fun SaranUpgradeBanner(
+    jumlahTransaksi: Int,
+    onLihatPaket: () -> Unit,
+    onTutup: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Toko kamu ramai hari ini! \uD83C\uDF89 ($jumlahTransaksi transaksi)",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+                Text(
+                    "Cocok upgrade ke Pro biar makin lancar",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+            }
+            TextButton(onClick = onLihatPaket) { Text("Lihat Paket") }
+            IconButton(onClick = onTutup, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Tutup",
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    }
+}
+
 private fun HeaderKasir(namaToko: String, logoPath: String?, namaPengguna: String) {
     Column {
         Row(
@@ -395,6 +457,11 @@ private fun inisialNama(nama: String): String {
     }
 }
 
+/**
+ * Baris chip kategori produk (horizontal scroll) untuk filter cepat di grid Kasir.
+ * "Semua" merepresentasikan kategoriTerpilih == null. Data kategori & filter sudah ada
+ * di KasirViewModel sebelumnya (pilihKategori) - baris ini murni UI yang sebelumnya belum ada.
+ */
 /**
  * Area produk (search+scan, chip kategori, grid produk) - dipakai di KEDUA mode layout
  * (satu kolom & dua kolom) lewat [modifier] yang beda dari pemanggil, supaya tidak ada
@@ -509,11 +576,6 @@ private fun AreaProdukKasir(
     }
 }
 
-/**
- * Baris chip kategori produk (horizontal scroll) untuk filter cepat di grid Kasir.
- * "Semua" merepresentasikan kategoriTerpilih == null. Data kategori & filter sudah ada
- * di KasirViewModel sebelumnya (pilihKategori) - baris ini murni UI yang sebelumnya belum ada.
- */
 @Composable
 private fun CategoryChipsRow(
     kategori: List<com.nada.kasir.core.data.local.entity.CategoryEntity>,
