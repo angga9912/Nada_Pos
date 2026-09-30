@@ -10,6 +10,7 @@ import com.nada.kasir.core.data.repository.PrinterRepository
 import com.nada.kasir.core.data.repository.ProductRepository
 import com.nada.kasir.core.data.repository.StoreRepository
 import com.nada.kasir.core.data.repository.TransactionRepository
+import com.nada.kasir.core.domain.logic.PembayaranCalculator
 import com.nada.kasir.core.domain.model.KeranjangItem
 import com.nada.kasir.core.paket.PaketAplikasi
 import com.nada.kasir.core.paket.PaketRepository
@@ -225,9 +226,27 @@ class KasirViewModel @Inject constructor(
             current[idx] = item.copy(qty = qtyBaru)
         }
         keranjangFlow.value = current
+        sesuaikanDiskonDenganKeranjang()
     }
 
-    fun setDiskonTotal(nilai: Double) { diskonFlow.value = nilai }
+    fun setDiskonTotal(nilai: Double) {
+        val subtotal = keranjangFlow.value.sumOf { it.harga * it.qty }
+        if (!PembayaranCalculator.diskonValid(nilai, subtotal)) {
+            errorFlow.value = "Diskon tidak boleh melebihi subtotal belanja."
+            return
+        }
+        diskonFlow.value = nilai
+    }
+
+    /** Diskon yang sudah diisi tidak boleh lebih besar dari subtotal setelah isi keranjang berkurang. */
+    private fun sesuaikanDiskonDenganKeranjang() {
+        val subtotal = keranjangFlow.value.sumOf { it.harga * it.qty }
+        val dibatasi = PembayaranCalculator.batasiDiskon(diskonFlow.value, subtotal)
+        if (dibatasi != diskonFlow.value) {
+            diskonFlow.value = dibatasi
+            errorFlow.value = "Diskon disesuaikan karena subtotal belanja berkurang."
+        }
+    }
 
     fun bayar(userId: Long, metode: MetodePembayaran, jumlahDiterima: Double, namaPembeli: String? = null, catatanMetode: String? = null) {
         viewModelScope.launch {

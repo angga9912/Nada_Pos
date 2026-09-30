@@ -68,7 +68,12 @@ class BackupManager @Inject constructor(
     private fun keRelatif(absolutePath: String?): String? {
         if (absolutePath.isNullOrBlank()) return null
         val basis = context.filesDir.absolutePath
-        return if (absolutePath.startsWith(basis)) absolutePath.removePrefix(basis).trimStart('/') else null
+        if (!absolutePath.startsWith(basis)) return null
+        val relatif = absolutePath.removePrefix(basis).trimStart('/')
+        // Tolak path kosong dan path yang mencoba keluar folder (mis. "../databases/x") - path ini
+        // bisa berasal dari file backup yang tidak tepercaya.
+        if (relatif.isBlank() || relatif.split('/').any { it == ".." || it == "." }) return null
+        return relatif
     }
 
     suspend fun backup(): Result<File> = withContext(Dispatchers.IO) {
@@ -150,18 +155,52 @@ class BackupManager @Inject constructor(
             return@withContext Result.Failure(AppError.FormatExcelSalah)
         }
 
-        val stores = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("stores"), EntityJsonMapper::storeFromJson) } catch (e: Exception) { emptyList() }
-        val users = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("users"), EntityJsonMapper::userFromJson) } catch (e: Exception) { emptyList() }
-        val categories = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("categories"), EntityJsonMapper::categoryFromJson) } catch (e: Exception) { emptyList() }
-        val products = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("products"), EntityJsonMapper::productFromJson) } catch (e: Exception) { emptyList() }
-        val printers = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("printers"), EntityJsonMapper::printerFromJson) } catch (e: Exception) { emptyList() }
-        val settings = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("settings"), EntityJsonMapper::settingFromJson) } catch (e: Exception) { emptyList() }
-        val stockMovements = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("stockMovements"), EntityJsonMapper::stockMovementFromJson) } catch (e: Exception) { emptyList() }
+        // Parsing KETAT: kalau ada satu bagian saja yang hilang/cacat, seluruh restore dibatalkan
+        // SEBELUM data lama disentuh. (Sebelumnya bagian yang gagal diparse diam-diam dianggap
+        // daftar kosong, lalu semua tabel tetap dihapus -> data hilang.)
+        val stores: List<com.nada.kasir.core.data.local.entity.StoreEntity>
+        val users: List<com.nada.kasir.core.data.local.entity.UserEntity>
+        val categories: List<com.nada.kasir.core.data.local.entity.CategoryEntity>
+        val products: List<com.nada.kasir.core.data.local.entity.ProductEntity>
+        val printers: List<com.nada.kasir.core.data.local.entity.PrinterEntity>
+        val settings: List<com.nada.kasir.core.data.local.entity.SettingEntity>
+        val stockMovements: List<com.nada.kasir.core.data.local.entity.StockMovementEntity>
+        val transaksiJsonArray: org.json.JSONArray
+        val itemJsonArray: org.json.JSONArray
+        val paymentJsonArray: org.json.JSONArray
+        try {
+            stores = EntityJsonMapper.jsonArrayToList(root.getJSONArray("stores"), EntityJsonMapper::storeFromJson)
+            users = EntityJsonMapper.jsonArrayToList(root.getJSONArray("users"), EntityJsonMapper::userFromJson)
+            categories = EntityJsonMapper.jsonArrayToList(root.getJSONArray("categories"), EntityJsonMapper::categoryFromJson)
+            products = EntityJsonMapper.jsonArrayToList(root.getJSONArray("products"), EntityJsonMapper::productFromJson)
+            printers = EntityJsonMapper.jsonArrayToList(root.getJSONArray("printers"), EntityJsonMapper::printerFromJson)
+            settings = EntityJsonMapper.jsonArrayToList(root.getJSONArray("settings"), EntityJsonMapper::settingFromJson)
+            stockMovements = EntityJsonMapper.jsonArrayToList(root.getJSONArray("stockMovements"), EntityJsonMapper::stockMovementFromJson)
 
-        // Transaksi butuh pemetaan ID lama -> ID baru supaya item & payment tetap terhubung ke induknya
-        val transaksiJsonArray = try { root.getJSONArray("transactions") } catch (e: Exception) { null }
-        val itemJsonArray = try { root.getJSONArray("transactionItems") } catch (e: Exception) { null }
-        val paymentJsonArray = try { root.getJSONArray("payments") } catch (e: Exception) { null }
+            // Transaksi butuh pemetaan ID lama -> ID baru supaya item & payment tetap terhubung ke induknya.
+            // Ketiganya juga divalidasi penuh di sini (bukan baru di dalam transaksi DB).
+            transaksiJsonArray = root.getJSONArray("transactions")
+            itemJsonArray = root.getJSONArray("transactionItems")
+            paymentJsonArray = root.getJSONArray("payments")
+            for (i in 0 until transaksiJsonArray.length()) {
+                val o = transaksiJsonArray.getJSONObject(i)
+                EntityJsonMapper.transactionOldId(o); EntityJsonMapper.transactionFromJson(o)
+            }
+            for (i in 0 until itemJsonArray.length()) {
+                val o = itemJsonArray.getJSONObject(i)
+                EntityJsonMapper.itemOldTransactionId(o); EntityJsonMapper.itemFromJson(o, 0L)
+            }
+            for (i in 0 until paymentJsonArray.length()) {
+                val o = paymentJsonArray.getJSONObject(i)
+                EntityJsonMapper.paymentOldTransactionId(o); EntityJsonMapper.paymentFromJson(o, 0L)
+            }
+        } catch (e: Exception) {
+            return@withContext Result.Failure(AppError.FormatExcelSalah)
+        }
+
+        // Aplikasi selalu punya minimal 1 akun (admin awal dibuat otomatis). Backup tanpa pengguna
+        // dianggap tidak valid - kalau dipulihkan, tidak akan ada akun yang bisa dipakai login.
+        if (users.isEmpty()) return@withContext Result.Failure(AppError.FormatExcelSalah)
 
         // Tulis kembali file foto (produk & logo toko) ke filesDir SEBELUM transaksi DB, dengan
         // path relatif yang sama seperti waktu backup - supaya fotoPath/logoPath yang ada di JSON
@@ -172,10 +211,15 @@ class BackupManager @Inject constructor(
         // fotoPath lama tidak otomatis cocok. Untuk itu path di JSON ditimpa ke absolute path
         // filesDir HP SAAT INI dulu, baru fotonya ditulis ke lokasi itu.
         fun tulisFotoDanPetakanUlang(pathLama: String?): String? {
+            // Path yang mengandung ".." berasal dari backup tidak tepercaya -> dibuang, bukan dipakai.
+            if (pathLama != null && pathLama.split('/').any { it == ".." }) return null
             val relatif = keRelatif(pathLama) ?: return pathLama
             val bytes = entriFoto[relatif] ?: return pathLama
             return try {
                 val tujuan = File(context.filesDir, relatif)
+                // Lapis kedua: pastikan hasil akhirnya benar-benar berada di dalam filesDir.
+                val basisKanonik = context.filesDir.canonicalPath + File.separator
+                if (!tujuan.canonicalPath.startsWith(basisKanonik)) return null
                 tujuan.parentFile?.mkdirs()
                 tujuan.writeBytes(bytes)
                 tujuan.absolutePath
@@ -202,7 +246,7 @@ class BackupManager @Inject constructor(
                 settings.forEach { settingDao.upsert(it) }
                 if (stockMovements.isNotEmpty()) stockMovementDao.insertAll(stockMovements)
 
-                if (transaksiJsonArray != null) {
+                run {
                     val petaIdLamaKeBaru = mutableMapOf<Long, Long>()
                     for (i in 0 until transaksiJsonArray.length()) {
                         val o = transaksiJsonArray.getJSONObject(i)
@@ -211,7 +255,7 @@ class BackupManager @Inject constructor(
                         val idBaru = transactionDao.insertAllTransactions(listOf(entity)).first()
                         petaIdLamaKeBaru[idLama] = idBaru
                     }
-                    itemJsonArray?.let { arr ->
+                    itemJsonArray.let { arr ->
                         val items = mutableListOf<com.nada.kasir.core.data.local.entity.TransactionItemEntity>()
                         for (i in 0 until arr.length()) {
                             val o = arr.getJSONObject(i)
@@ -220,7 +264,7 @@ class BackupManager @Inject constructor(
                         }
                         if (items.isNotEmpty()) transactionDao.insertAllItems(items)
                     }
-                    paymentJsonArray?.let { arr ->
+                    paymentJsonArray.let { arr ->
                         val payments = mutableListOf<com.nada.kasir.core.data.local.entity.PaymentEntity>()
                         for (i in 0 until arr.length()) {
                             val o = arr.getJSONObject(i)

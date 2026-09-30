@@ -44,7 +44,13 @@ class TransactionRepository @Inject constructor(
         namaPembeli: String? = null,
         catatanMetode: String? = null
     ): Result<Long> {
+        if (items.isEmpty() || items.any { it.qty <= 0 }) {
+            return Result.Failure(AppError.Lainnya("Keranjang kosong atau jumlah barang tidak valid."))
+        }
         val subtotal = items.sumOf { it.harga * it.qty }
+        if (!PembayaranCalculator.diskonValid(diskonTotal, subtotal)) {
+            return Result.Failure(AppError.Lainnya("Diskon tidak boleh negatif atau melebihi subtotal belanja."))
+        }
         val total = subtotal - diskonTotal
 
         if (metode == MetodePembayaran.TUNAI && !PembayaranCalculator.cukup(jumlahDiterima, total)) {
