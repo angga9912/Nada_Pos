@@ -309,13 +309,6 @@ fun KasirScreen(
 }
 
 /**
- * Top bar Kasir - identitas toko (logo + nama, pola sama seperti HeaderDashboard supaya
- * konsisten) plus status "Online", notifikasi & printer (placeholder, belum ada sistem
- * notifikasi/status printer real-time - sama seperti bel di Dashboard), dan avatar inisial
- * kasir yang sedang login. Warna tetap ikut branding dinamis toko (ThemeConfig), bukan hardcode.
- */
-@Composable
-/**
  * Banner ajakan upgrade yang LEMBUT - muncul saat toko (paket Basic) ramai hari ini, tapi
  * TIDAK PERNAH memblokir transaksi. Kasir tetap bebas lanjut jualan seperti biasa baik banner
  * ditutup maupun dibiarkan. Ditutup = tidak muncul lagi hari ini saja (lihat
@@ -361,7 +354,13 @@ private fun SaranUpgradeBanner(
         }
     }
 }
-
+/**
+ * Top bar Kasir - identitas toko (logo + nama, pola sama seperti HeaderDashboard supaya
+ * konsisten) plus status "Online", notifikasi & printer (placeholder, belum ada sistem
+ * notifikasi/status printer real-time - sama seperti bel di Dashboard), dan avatar inisial
+ * kasir yang sedang login. Warna tetap ikut branding dinamis toko (ThemeConfig), bukan hardcode.
+ */
+@Composable
 private fun HeaderKasir(namaToko: String, logoPath: String?, namaPengguna: String) {
     Column {
         Row(
