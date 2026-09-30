@@ -8,6 +8,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val KEY_PAKET_AKTIF = "paket_aktif"
+private const val KEY_SARAN_UPGRADE_DISMISS_TANGGAL = "saran_upgrade_dismiss_tanggal"
 
 @Singleton
 class PaketRepository @Inject constructor(
@@ -25,5 +26,20 @@ class PaketRepository @Inject constructor(
 
     suspend fun setPaketAktif(paket: PaketAplikasi) {
         settingDao.upsert(SettingEntity(key = KEY_PAKET_AKTIF, value = paket.name))
+    }
+
+    /**
+     * Tanggal (format "yyyy-MM-dd") terakhir kali kasir menutup banner saran upgrade di layar
+     * Kasir - null kalau belum pernah ditutup. Dipakai supaya banner tidak muncul lagi di HARI
+     * yang sama setelah ditutup, tapi otomatis muncul lagi besok kalau ambang transaksi harian
+     * tercapai lagi (bukan ditutup permanen selamanya - upsell-nya tetap relevan tiap hari toko
+     * ramai, bukan cuma sekali seumur hidup).
+     */
+    fun observeSaranUpgradeDismissedTanggal(): Flow<String?> = settingDao.observeAll().map { list ->
+        list.firstOrNull { it.key == KEY_SARAN_UPGRADE_DISMISS_TANGGAL }?.value
+    }
+
+    suspend fun dismissSaranUpgradeHariIni(tanggalHariIni: String) {
+        settingDao.upsert(SettingEntity(key = KEY_SARAN_UPGRADE_DISMISS_TANGGAL, value = tanggalHariIni))
     }
 }
