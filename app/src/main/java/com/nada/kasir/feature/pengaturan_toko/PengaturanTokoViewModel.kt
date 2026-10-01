@@ -28,6 +28,9 @@ class PengaturanTokoViewModel @Inject constructor(
     val store: StateFlow<StoreEntity?> = storeRepository.observeStore()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    /** ID Perangkat untuk dikirim ke penjual - kode aktivasi dibuat khusus untuk ID ini. */
+    val idPerangkat: String = licenseRepository.idPerangkatTampil()
+
     val statusLisensi: StateFlow<StatusLisensi> = licenseRepository.observeStatus()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StatusLisensi(PaketAplikasi.BASIC, null, false))
 

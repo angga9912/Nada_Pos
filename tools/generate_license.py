@@ -17,13 +17,19 @@ LANGKAH SEKALI SAJA - buat pasangan kunci:
   NADA_LICENSE_PRIVATE_KEY (untuk workflow "Generate Kode Lisensi"), (2) cadangan offline.
   Kalau license.private hilang, Anda tidak bisa membuat kode baru untuk APK yang sudah beredar.
 
-PAKAI SEHARI-HARI:
-    python3 generate_license.py --tier PRO --expiry 20271231
-    python3 generate_license.py --tier CUSTOM --expiry LIFETIME
-    python3 generate_license.py --tier PRO --bulan 1        # expiry = hari ini + 1 bulan (30 hari)
+PAKAI SEHARI-HARI (kode TERIKAT PERANGKAT - hanya berlaku di HP pemilik ID itu):
+    Minta pelanggan mengirim "ID Perangkat" yang tampil di Pengaturan Toko (atau otomatis
+    di pesan WhatsApp upgrade/trial), mis. A1B2-C3D4-E5F6. Lalu:
+
+    python3 generate_license.py --tier PRO --expiry 20271231 --device A1B2-C3D4-E5F6
+    python3 generate_license.py --tier CUSTOM --expiry LIFETIME --device A1B2-C3D4-E5F6
+    python3 generate_license.py --tier PRO --bulan 1 --device A1B2-C3D4-E5F6   # hari ini + 30 hari
+
+    Kode lama yang TIDAK terikat perangkat (bisa dibagikan ke banyak HP) hanya untuk keperluan
+    khusus dan harus diminta eksplisit dengan --tanpa-perangkat.
 
 CEK SEBUAH KODE (memakai license.public):
-    python3 generate_license.py --cek NADA-PRO-LIFETIME-XXXXXXXX-...
+    python3 generate_license.py --cek NADA-PRO-LIFETIME-XXXXXXXX-... --device A1B2-C3D4-E5F6
 
 Kunci privat dibaca dari environment variable NADA_LICENSE_PRIVATE_KEY (dipakai duluan,
 untuk CI/CD) atau dari file license.private (bisa diganti lewat --private-file).
@@ -47,7 +53,9 @@ DEFAULT_PRIVATE_FILE = ROOT / "license.private"
 DEFAULT_PUBLIC_FILE = ROOT / "license.public"
 
 # Awalan pesan yang ditandatangani. HARUS sama persis dengan LicenseKeyValidator.kt di aplikasi.
-DOMAIN = "NADA-LIC-V1"
+DOMAIN_V1 = "NADA-LIC-V1"   # kode lama, tidak terikat perangkat
+DOMAIN_V2 = "NADA-LIC-V2"   # kode terikat perangkat (standar sekarang)
+PANJANG_ID_PERANGKAT = 12   # 12 karakter hex, sama dengan PerangkatId.kt di aplikasi
 
 # --- Parameter kurva NIST P-256 (secp256r1) ---
 P = 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF
@@ -212,21 +220,37 @@ def cmd_init(private_file, public_file, paksa):
 # ---------------------------------------------------------------------------
 # Kode aktivasi
 # ---------------------------------------------------------------------------
-def pesan_untuk(tier, expiry):
-    return f"{DOMAIN}:{tier}:{expiry}".encode()
+def normalisasi_device(teks):
+    """'a1b2-c3d4-e5f6' -> 'A1B2C3D4E5F6'. Mengembalikan None kalau bukan 12 karakter hex."""
+    bersih = "".join(c for c in teks.upper() if c.isalnum())
+    if len(bersih) != PANJANG_ID_PERANGKAT or any(c not in "0123456789ABCDEF" for c in bersih):
+        return None
+    return bersih
 
 
-def buat_kode(d, tier, expiry):
-    tanda_tangan = sign(d, pesan_untuk(tier, expiry))
+def tampil_device(device):
+    return "-".join(device[i:i + 4] for i in range(0, len(device), 4))
+
+
+def pesan_untuk(tier, expiry, device=None):
+    """Pesan yang ditandatangani. Tanpa device = format lama (V1); dengan device = V2."""
+    if device is None:
+        return f"{DOMAIN_V1}:{tier}:{expiry}".encode()
+    return f"{DOMAIN_V2}:{tier}:{expiry}:{device}".encode()
+
+
+def buat_kode(d, tier, expiry, device=None):
+    tanda_tangan = sign(d, pesan_untuk(tier, expiry, device))
     # Pastikan tanda tangan benar-benar cocok dengan kunci publik sebelum dipakai
-    if not verify(public_dari_private(d), pesan_untuk(tier, expiry), tanda_tangan):
+    if not verify(public_dari_private(d), pesan_untuk(tier, expiry, device), tanda_tangan):
         raise RuntimeError("Verifikasi internal gagal - kode tidak dikeluarkan.")
     b32 = base64.b32encode(tanda_tangan).decode().rstrip("=")
     kelompok = "-".join(b32[i:i + 8] for i in range(0, len(b32), 8))
     return f"NADA-{tier}-{expiry}-{kelompok}"
 
 
-def cek_kode(kode, public_file):
+def cek_kode(kode, public_file, device=None):
+    """Mengembalikan "V2" (terikat perangkat), "V1" (kode lama), atau None (tidak valid)."""
     if not public_file.exists():
         print(f"{public_file} tidak ditemukan.", file=sys.stderr)
         sys.exit(1)
@@ -241,7 +265,11 @@ def cek_kode(kode, public_file):
         tanda_tangan = base64.b32decode(b32)
     except Exception:
         return False
-    return verify(titik, pesan_untuk(bagian[1], bagian[2]), tanda_tangan)
+    if device is not None and verify(titik, pesan_untuk(bagian[1], bagian[2], device), tanda_tangan):
+        return "V2"
+    if verify(titik, pesan_untuk(bagian[1], bagian[2]), tanda_tangan):
+        return "V1"
+    return None
 
 
 def main():
@@ -252,6 +280,9 @@ def main():
     parser.add_argument("--tier", choices=["CUSTOM", "PRO"], help="Tingkat paket yang dibeli")
     parser.add_argument("--private-file", help="Lokasi custom file license.private")
     parser.add_argument("--public-file", help="Lokasi custom file license.public")
+    parser.add_argument("--device", help="ID Perangkat pelanggan (12 hex, mis. A1B2-C3D4-E5F6) - kode hanya berlaku di HP itu")
+    parser.add_argument("--tanpa-perangkat", action="store_true",
+                        help="Buat kode LAMA yang tidak terikat perangkat (bisa dibagikan ke banyak HP - hindari)")
     parser.add_argument("--expiry", help="Tanggal kadaluarsa YYYYMMDD, atau 'LIFETIME' untuk sekali bayar")
     parser.add_argument("--bulan", type=int, help="Jumlah bulan langganan dari hari ini")
     args = parser.parse_args()
@@ -263,11 +294,20 @@ def main():
         cmd_init(private_file, public_file, args.force)
         return
 
+    device_cek = None
+    if args.device:
+        device_cek = normalisasi_device(args.device)
+        if device_cek is None:
+            parser.error("--device harus 12 karakter hex, contoh: A1B2-C3D4-E5F6")
+
     if args.cek:
-        if cek_kode(args.cek, public_file):
-            print("KODE VALID (tanda tangan cocok dengan license.public).")
+        hasil = cek_kode(args.cek, public_file, device_cek)
+        if hasil == "V2":
+            print(f"KODE VALID dan terikat ke perangkat {tampil_device(device_cek)}.")
+        elif hasil == "V1":
+            print("KODE VALID, tetapi format LAMA (tidak terikat perangkat - bisa dibagikan ke HP lain).")
         else:
-            print("KODE TIDAK VALID.")
+            print("KODE TIDAK VALID" + (" untuk perangkat tersebut." if device_cek else "."))
             sys.exit(2)
         return
 
@@ -290,10 +330,19 @@ def main():
                 print(f"Format tanggal salah: {expiry}. Gunakan YYYYMMDD, contoh: 20271231", file=sys.stderr)
                 sys.exit(1)
 
+    if device_cek is None and not args.tanpa_perangkat:
+        parser.error("Isi --device ID_PERANGKAT (minta ke pelanggan), atau --tanpa-perangkat untuk kode lama.")
+    if device_cek is not None and args.tanpa_perangkat:
+        parser.error("Pilih salah satu: --device atau --tanpa-perangkat.")
+
     d = load_private(args.private_file)
-    kode = buat_kode(d, args.tier, expiry)
+    kode = buat_kode(d, args.tier, expiry, device_cek)
     print(f"\nKode aktivasi untuk paket {args.tier} (berlaku sampai: {expiry}):\n")
     print(f"    {kode}\n")
+    if device_cek is not None:
+        print(f"Kode ini HANYA berlaku di perangkat dengan ID {tampil_device(device_cek)}.")
+    else:
+        print("PERINGATAN: kode format lama - TIDAK terikat perangkat, bisa dipakai di banyak HP.")
     print("Kirim kode ini ke pelanggan lewat WhatsApp setelah pembayaran diterima.")
     print("(Kode memang panjang - cukup salin-tempel utuh; huruf besar/kecil dan spasi tidak masalah.)")
 

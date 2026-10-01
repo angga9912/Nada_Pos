@@ -18,8 +18,9 @@ object KontakSupport {
      * yang ingin dituju, supaya penjual langsung tahu konteks tanpa pembeli
      * perlu mengetik ulang.
      */
-    fun bukaWhatsAppUpgrade(context: Context, paketTujuan: PaketAplikasi) {
-        val pesan = "Halo, saya ingin upgrade Nada POS ke paket ${paketTujuan.label}. Mohon info lebih lanjut."
+    fun bukaWhatsAppUpgrade(context: Context, paketTujuan: PaketAplikasi, idPerangkat: String? = null) {
+        val pesan = "Halo, saya ingin upgrade Nada POS ke paket ${paketTujuan.label}. Mohon info lebih lanjut." +
+            blokIdPerangkat(idPerangkat)
         bukaWhatsApp(context, pesan)
     }
 
@@ -30,10 +31,16 @@ object KontakSupport {
      * generate, tidak dipaksa dari sini. Ganti angkanya di sini kalau kebijakan durasi
      * trial berubah.
      */
-    fun bukaWhatsAppTrial(context: Context, paketTujuan: PaketAplikasi) {
-        val pesan = "Halo, saya ingin coba TRIAL 14 hari Nada POS paket ${paketTujuan.label}. Boleh minta kode aktivasi trial-nya?"
+    fun bukaWhatsAppTrial(context: Context, paketTujuan: PaketAplikasi, idPerangkat: String? = null) {
+        val pesan = "Halo, saya ingin coba TRIAL 14 hari Nada POS paket ${paketTujuan.label}. Boleh minta kode aktivasi trial-nya?" +
+            blokIdPerangkat(idPerangkat)
         bukaWhatsApp(context, pesan)
     }
+
+    /** Kode lisensi terikat ke satu HP, jadi penjual butuh ID Perangkat untuk membuatkan kodenya. */
+    private fun blokIdPerangkat(idPerangkat: String?): String =
+        if (idPerangkat.isNullOrBlank()) ""
+        else "\n\nID Perangkat saya: $idPerangkat\n(Mohon kode aktivasi dibuat untuk ID ini.)"
 
     fun bukaWhatsApp(context: Context, pesan: String) {
         val uri = Uri.parse("https://wa.me/$NOMOR_WA?text=${Uri.encode(pesan)}")

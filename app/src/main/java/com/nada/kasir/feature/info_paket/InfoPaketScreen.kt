@@ -124,7 +124,7 @@ fun InfoPaketScreen(
                 .filter { it.ordinal > paketAktif.ordinal }
                 .forEach { paketTujuan ->
                     OutlinedButton(
-                        onClick = { KontakSupport.bukaWhatsAppUpgrade(context, paketTujuan) },
+                        onClick = { KontakSupport.bukaWhatsAppUpgrade(context, paketTujuan, viewModel.idPerangkat) },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                     ) {
                         Text("Upgrade ke ${paketTujuan.label} via WhatsApp")
@@ -133,7 +133,7 @@ fun InfoPaketScreen(
                     // tidak lebih menonjol dari tombol Upgrade berbayar di atasnya - trial cuma
                     // jalan masuk, ajakan utamanya tetap ke upgrade langsung.
                     TextButton(
-                        onClick = { KontakSupport.bukaWhatsAppTrial(context, paketTujuan) },
+                        onClick = { KontakSupport.bukaWhatsAppTrial(context, paketTujuan, viewModel.idPerangkat) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Coba trial 14 hari ${paketTujuan.label} dulu")

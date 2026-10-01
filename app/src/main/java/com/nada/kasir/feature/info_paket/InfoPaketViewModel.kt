@@ -3,6 +3,7 @@ package com.nada.kasir.feature.info_paket
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nada.kasir.core.data.repository.TransactionRepository
+import com.nada.kasir.core.lisensi.DeviceIdProvider
 import com.nada.kasir.core.paket.PaketAplikasi
 import com.nada.kasir.core.paket.PaketRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -15,8 +16,12 @@ import javax.inject.Inject
 @HiltViewModel
 class InfoPaketViewModel @Inject constructor(
     paketRepository: PaketRepository,
-    transactionRepository: TransactionRepository
+    transactionRepository: TransactionRepository,
+    deviceIdProvider: DeviceIdProvider
 ) : ViewModel() {
+    /** ID Perangkat untuk disertakan di pesan WhatsApp upgrade/trial (kode lisensi terikat perangkat). */
+    val idPerangkat: String = deviceIdProvider.idTampil
+
     val paketAktif: StateFlow<PaketAplikasi> = paketRepository.observePaketAktif()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PaketAplikasi.BASIC)
 

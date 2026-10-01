@@ -58,10 +58,17 @@ class LicenseKeyValidatorTest {
         return sb.toString()
     }
 
-    private fun buatKode(tier: String, expiry: String, kunci: KeyPair = pasangan): String {
+    /** Tanpa [idPerangkat] = kode lama V1; dengan [idPerangkat] (12 hex kanonik) = kode V2 terikat perangkat. */
+    private fun buatKode(
+        tier: String,
+        expiry: String,
+        kunci: KeyPair = pasangan,
+        idPerangkat: String? = null
+    ): String {
+        val pesan = if (idPerangkat == null) "NADA-LIC-V1:$tier:$expiry" else "NADA-LIC-V2:$tier:$expiry:$idPerangkat"
         val penanda = Signature.getInstance("SHA256withECDSA")
         penanda.initSign(kunci.private)
-        penanda.update("NADA-LIC-V1:$tier:$expiry".toByteArray(Charsets.UTF_8))
+        penanda.update(pesan.toByteArray(Charsets.UTF_8))
         val tandaTangan = base32(derKeMentah(penanda.sign())).chunked(8).joinToString("-")
         return "NADA-$tier-$expiry-$tandaTangan"
     }
@@ -149,5 +156,68 @@ class LicenseKeyValidatorTest {
     fun `tanggal expiry yang mustahil ditolak walau tanda tangannya benar`() {
         // Tanda tangan valid untuk "20271345" (bulan 13), tapi bukan tanggal nyata.
         assertNull(validasi(buatKode("PRO", "20271345")))
+    }
+
+    // ---------------------------------------------------------------------------------
+    // F-12: kode terikat perangkat (V2)
+    // ---------------------------------------------------------------------------------
+    private val perangkatA = "A1B2C3D4E5F6"
+    private val perangkatB = "0F0E0D0C0B0A"
+
+    private fun validasiUntuk(kode: String, id: String?, izinkanLama: Boolean = true) =
+        LicenseKeyValidator.validasi(kode, kunciPublik, id, izinkanLama)
+
+    @Test
+    fun `kode terikat perangkat diterima di perangkat yang benar`() {
+        val hasil = validasiUntuk(buatKode("PRO", "LIFETIME", idPerangkat = perangkatA), perangkatA)
+        assertNotNull(hasil)
+        assertEquals(PaketAplikasi.PRO, hasil!!.tier)
+        assertEquals(true, hasil.terikatPerangkat)
+    }
+
+    @Test
+    fun `kode terikat perangkat ditolak di perangkat lain`() {
+        val kode = buatKode("PRO", "LIFETIME", idPerangkat = perangkatA)
+        assertNull(validasiUntuk(kode, perangkatB))
+        // juga ditolak walau masa peralihan kode lama sedang dibuka (kodenya memang bukan kode lama)
+        assertNull(validasiUntuk(kode, perangkatB, izinkanLama = true))
+    }
+
+    @Test
+    fun `kode terikat perangkat ditolak kalau ID perangkat tidak diketahui`() {
+        val kode = buatKode("PRO", "LIFETIME", idPerangkat = perangkatA)
+        assertNull(validasiUntuk(kode, null))
+        assertNull(validasiUntuk(kode, "bukan-id-valid"))
+    }
+
+    @Test
+    fun `ID perangkat boleh ditulis huruf kecil dan dengan tanda hubung`() {
+        val kode = buatKode("CUSTOM", "20271231", idPerangkat = perangkatA)
+        assertNotNull(validasiUntuk(kode, "a1b2-c3d4-e5f6"))
+    }
+
+    @Test
+    fun `kode lama tanpa perangkat diterima selama masa peralihan dan ditandai tidak terikat`() {
+        val hasil = validasiUntuk(buatKode("PRO", "LIFETIME"), perangkatA, izinkanLama = true)
+        assertNotNull(hasil)
+        assertEquals(false, hasil!!.terikatPerangkat)
+    }
+
+    @Test
+    fun `kode lama ditolak setelah masa peralihan ditutup`() {
+        assertNull(validasiUntuk(buatKode("PRO", "LIFETIME"), perangkatA, izinkanLama = false))
+    }
+
+    @Test
+    fun `kode terikat perangkat tetap diterima setelah masa peralihan ditutup`() {
+        val kode = buatKode("PRO", "LIFETIME", idPerangkat = perangkatA)
+        assertNotNull(validasiUntuk(kode, perangkatA, izinkanLama = false))
+    }
+
+    @Test
+    fun `tier atau expiry kode terikat perangkat yang diubah ditolak`() {
+        val kode = buatKode("PRO", "20260101", idPerangkat = perangkatA)
+        assertNull(validasiUntuk(kode.replace("20260101", "20991231"), perangkatA))
+        assertNull(validasiUntuk(kode.replaceFirst("NADA-PRO-", "NADA-CUSTOM-"), perangkatA))
     }
 }

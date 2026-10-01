@@ -111,6 +111,26 @@ fun PengaturanTokoScreen(viewModel: PengaturanTokoViewModel = hiltViewModel()) {
             }
         }
         Spacer(Modifier.height(12.dp))
+        val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("ID Perangkat", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    viewModel.idPerangkat,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                )
+            }
+            TextButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(viewModel.idPerangkat)) }) {
+                Text("Salin")
+            }
+        }
+        Text(
+            "Kirim ID ini ke penjual saat meminta kode aktivasi. Kode hanya berlaku di perangkat ini.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(8.dp))
         OutlinedTextField(
             value = kodeAktivasi,
             onValueChange = { kodeAktivasi = it },

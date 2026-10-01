@@ -52,7 +52,25 @@ Setup sekali saja:
 5. Secret lama `NADA_LICENSE_SECRET` dan file `license.secret.example` sudah tidak dipakai
    dan boleh dihapus.
 
-Cek sebuah kode kapan saja: `python3 tools/generate_license.py --cek NADA-PRO-...`
+Cek sebuah kode kapan saja: `python3 tools/generate_license.py --cek NADA-PRO-... --device ID-PERANGKAT`
+
+### Kode terikat perangkat (F-12)
+Kode aktivasi sekarang **hanya berlaku di satu HP**. Tanda tangan dibuat atas pesan yang memuat
+**ID Perangkat** (12 karakter hex, mis. `A1B2-C3D4-E5F6`, diturunkan dari ANDROID_ID dengan SHA-256).
+Format kode tidak berubah; aplikasi menghitung ID HP-nya sendiri saat memverifikasi, jadi kode yang
+dibuat untuk HP A otomatis tidak valid di HP B.
+
+- Pelanggan melihat ID-nya di **Pengaturan Toko → Status Lisensi** (ada tombol Salin). ID itu juga
+  otomatis tertulis di pesan WhatsApp saat mereka menekan tombol upgrade/trial di layar Info Paket.
+- ID bertahan setelah update atau instal ulang APK di HP yang sama, tetapi berubah setelah reset pabrik
+  (pelanggan perlu dibuatkan kode baru untuk ID barunya).
+- **Masa peralihan:** kode lama (tanpa ID perangkat) yang sudah terlanjur dijual masih diterima supaya
+  pelanggan lama tidak kehilangan paketnya. Setelah semua pelanggan lama dibuatkan kode baru, ubah
+  `IZINKAN_KODE_TANPA_PERANGKAT` di `LicenseKeyValidator.kt` menjadi `false` lalu build ulang.
+- Status lisensi adalah milik perangkat: **tidak ikut dibackup dan tidak ditimpa saat restore**.
+- Perlindungan jam: aplikasi mencatat waktu terakhir yang pernah dilihat sehingga memundurkan jam HP tidak
+  memperpanjang langganan. Ini perlindungan offline; menghapus data aplikasi lalu mengaktifkan ulang
+  sambil memundurkan jam masih bisa lolos (hanya validasi online yang menutupnya sepenuhnya).
 
 Batasan yang tetap perlu dipahami: validasi berjalan offline di dalam APK, jadi orang yang
 sangat berniat masih bisa mem-patch APK agar selalu menganggap lisensi valid (bukan
@@ -82,12 +100,14 @@ dipublikasikan/diupdate secara resmi). Sekarang sudah ada signing config:
 
 ### Cara pakai sehari-hari
 ```bash
+# Minta pelanggan mengirim "ID Perangkat" (tampil di Pengaturan Toko / pesan WhatsApp mereka).
 # Setelah pelanggan transfer untuk paket Pro langganan 1 bulan:
-python3 tools/generate_license.py --tier PRO --bulan 1
+python3 tools/generate_license.py --tier PRO --bulan 1 --device A1B2-C3D4-E5F6
 
 # Setelah pelanggan bayar sekali untuk paket Custom permanen:
-python3 tools/generate_license.py --tier CUSTOM --expiry LIFETIME
+python3 tools/generate_license.py --tier CUSTOM --expiry LIFETIME --device A1B2-C3D4-E5F6
 ```
+Workflow GitHub "Generate Kode Lisensi" juga meminta isian **ID Perangkat**.
 Kirim kode yang muncul ke pelanggan lewat WhatsApp → mereka masukkan di
 Pengaturan Toko → Aktivasi → fitur langsung terbuka.
 

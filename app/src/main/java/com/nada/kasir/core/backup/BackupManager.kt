@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.room.withTransaction
 import com.nada.kasir.core.data.local.AppDatabase
 import com.nada.kasir.core.data.local.dao.*
+import com.nada.kasir.core.data.local.entity.SettingEntity
+import com.nada.kasir.core.lisensi.KunciPengaturanLisensi
 import com.nada.kasir.core.util.AppError
 import com.nada.kasir.core.util.Result
 import kotlinx.coroutines.Dispatchers
@@ -93,7 +95,10 @@ class BackupManager @Inject constructor(
             root.put("payments", EntityJsonMapper.listToJsonArray(transactionDao.getAllPaymentsForBackup(), EntityJsonMapper::paymentToJson))
             root.put("stockMovements", EntityJsonMapper.listToJsonArray(stockMovementDao.getAllForBackup(), EntityJsonMapper::stockMovementToJson))
             root.put("printers", EntityJsonMapper.listToJsonArray(printerDao.getAllForBackup(), EntityJsonMapper::printerToJson))
-            root.put("settings", EntityJsonMapper.listToJsonArray(settingDao.getAllForBackup(), EntityJsonMapper::settingToJson))
+            root.put("settings", EntityJsonMapper.listToJsonArray(
+                settingDao.getAllForBackup().filter { it.key !in KunciPengaturanLisensi.SEMUA },
+                EntityJsonMapper::settingToJson
+            ))
 
             // Kumpulkan path relatif semua foto yang benar-benar ada (produk + logo toko),
             // pakai Set supaya tidak dobel kalau ada path yang sama kebetulan dipakai 2 baris.
@@ -234,6 +239,13 @@ class BackupManager @Inject constructor(
             appDatabase.withTransaction {
                 // Tahap 2: baru sekarang data lama dihapus - kalau exception terjadi di titik manapun
                 // setelah ini, Room me-rollback SEMUANYA (termasuk DELETE-nya), jadi data lama tetap ada.
+                // Status lisensi adalah milik PERANGKAT ini, bukan bagian dari data toko: simpan dulu
+                // sebelum tabel settings dikosongkan, lalu tulis kembali. Nilai lisensi yang kebetulan
+                // ada di file backup (backup versi lama) diabaikan, supaya file backup tidak bisa
+                // menyisipkan paket berbayar atau memundurkan penanda waktu anti-manipulasi jam.
+                val lisensiSaatIni = KunciPengaturanLisensi.SEMUA.mapNotNull { kunci ->
+                    settingDao.get(kunci)?.let { SettingEntity(kunci, it) }
+                }
                 storeDao.clearAll(); userDao.clearAll(); categoryDao.clearAll(); productDao.clearAll()
                 printerDao.clearAll(); settingDao.clearAll(); stockMovementDao.clearAll()
                 transactionDao.clearPayments(); transactionDao.clearItems(); transactionDao.clearTransactions()
@@ -243,7 +255,8 @@ class BackupManager @Inject constructor(
                 if (categories.isNotEmpty()) categoryDao.insertAll(categories)
                 if (productsSiap.isNotEmpty()) productDao.insertAll(productsSiap)
                 if (printers.isNotEmpty()) printerDao.insertAll(printers)
-                settings.forEach { settingDao.upsert(it) }
+                settings.filter { it.key !in KunciPengaturanLisensi.SEMUA }.forEach { settingDao.upsert(it) }
+                lisensiSaatIni.forEach { settingDao.upsert(it) }
                 if (stockMovements.isNotEmpty()) stockMovementDao.insertAll(stockMovements)
 
                 run {
