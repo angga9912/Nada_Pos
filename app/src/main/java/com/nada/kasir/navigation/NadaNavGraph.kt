@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.nada.kasir.core.data.local.entity.UserRole
+import com.nada.kasir.core.paket.PaketAplikasi
 import com.nada.kasir.core.session.SessionManager
 import com.nada.kasir.feature.backup.BackupScreen
 import com.nada.kasir.feature.dashboard.DashboardScreen
@@ -62,7 +63,9 @@ private val WarnaNavNonaktif = Color(0xFF64748B)
 @Composable
 fun NadaNavGraph(navController: NavHostController = rememberNavController()) {
     val context = LocalContext.current
-    val sessionManager = hiltViewModelSession()
+    val sessionHolder: SessionHolderViewModel = hiltViewModel()
+    val sessionManager = sessionHolder.sessionManager
+    val paketAktif by sessionHolder.paketAktif.collectAsState()
 
     val startDestination = remember {
         if (OnboardingPreference.sudahLihat(context)) NadaRoute.Login.route else NadaRoute.Onboarding.route
@@ -87,7 +90,8 @@ fun NadaNavGraph(navController: NavHostController = rememberNavController()) {
         composable(NadaRoute.MainShell.route) {
             MainShell(
                 navController = navController,
-                sessionManager = sessionManager
+                sessionManager = sessionManager,
+                paketAktif = paketAktif
             )
         }
         composable(NadaRoute.PengaturanPrinter.route) {
@@ -102,7 +106,11 @@ fun NadaNavGraph(navController: NavHostController = rememberNavController()) {
         }
         composable(NadaRoute.Laporan.route) {
             AdminRouteGuard(sessionManager, navController) {
-                LaporanScreen()
+                if (paketAktif.mencakup(PaketAplikasi.CUSTOM)) {
+                    LaporanScreen()
+                } else {
+                    LaporanTerkunci(onBukaInfoPaket = { navController.navigate(NadaRoute.InfoPaket.route) })
+                }
             }
         }
         composable(NadaRoute.PengaturanToko.route) {
@@ -176,14 +184,31 @@ private fun AdminRouteGuard(
  * tetap dibuka lewat NavController luar (poin 5: dikelompokkan, tapi tetap mudah ditemukan).
  */
 @Composable
-private fun MainShell(navController: NavHostController, sessionManager: SessionManager) {
+private fun MainShell(
+    navController: NavHostController,
+    sessionManager: SessionManager,
+    paketAktif: PaketAplikasi
+) {
     var tabAktif by rememberSaveable { mutableStateOf(TabUtama.KASIR) }
-    val isAdmin = sessionManager.isAdmin()
-    val currentUserId = sessionManager.currentUser.value?.id ?: 1L
 
+    // Penjaga sesi: NavController memulihkan back stack (termasuk layar ini) setelah proses aplikasi
+    // dimatikan sistem, tetapi SessionManager hanya ada di memori dan sudah kosong. Tanpa penjaga ini
+    // layar kasir bisa terbuka tanpa login dan transaksi tercatat atas user ID palsu.
+    val penggunaAktif by sessionManager.currentUser.collectAsState()
+    val pengguna = penggunaAktif
+    if (pengguna == null) {
+        LaunchedEffect(Unit) {
+            navController.navigate(NadaRoute.Login.route) { popUpTo(0) { inclusive = true } }
+        }
+        return
+    }
+    val isAdmin = pengguna.role == UserRole.ADMIN
+    val currentUserId = pengguna.id
+
+    // Cukup mengosongkan sesi: penjaga di atas yang mengarahkan ke Login (satu jalur navigasi saja,
+    // supaya tidak terjadi dua navigasi ke Login sekaligus).
     fun logout() {
         sessionManager.logout()
-        navController.navigate(NadaRoute.Login.route) { popUpTo(0) { inclusive = true } }
     }
 
     // Isi tiap tab dipisah jadi lambda supaya bisa dipakai di dua susunan layar (bar bawah untuk
@@ -197,9 +222,7 @@ private fun MainShell(navController: NavHostController, sessionManager: SessionM
             )
             TabUtama.PRODUK -> ProdukScreen(isAdmin = isAdmin)
             TabUtama.LAPORAN -> {
-                if (isAdmin) {
-                    LaporanScreen(onBukaRiwayat = { tabAktif = TabUtama.TRANSAKSI })
-                } else {
+                if (!isAdmin) {
                     Box(
                         modifier = Modifier.fillMaxSize().padding(24.dp),
                         contentAlignment = Alignment.Center
@@ -210,6 +233,10 @@ private fun MainShell(navController: NavHostController, sessionManager: SessionM
                             color = MaterialTheme.colorScheme.error
                         )
                     }
+                } else if (!paketAktif.mencakup(PaketAplikasi.CUSTOM)) {
+                    LaporanTerkunci(onBukaInfoPaket = { navController.navigate(NadaRoute.InfoPaket.route) })
+                } else {
+                    LaporanScreen(onBukaRiwayat = { tabAktif = TabUtama.TRANSAKSI })
                 }
             }
             TabUtama.TRANSAKSI -> RiwayatScreen(isAdmin = isAdmin)
@@ -295,8 +322,25 @@ private fun MainShell(navController: NavHostController, sessionManager: SessionM
     }
 }
 
+/** Ditampilkan menggantikan Laporan untuk paket BASIC (Laporan = fitur paket CUSTOM ke atas). */
 @Composable
-private fun hiltViewModelSession(): SessionManager {
-    val holder: SessionHolderViewModel = hiltViewModel()
-    return holder.sessionManager
+private fun LaporanTerkunci(onBukaInfoPaket: () -> Unit) {
+    Box(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                "Laporan tersedia di paket Custom dan Pro",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Upgrade paket untuk melihat laporan penjualan harian, bulanan, dan stok.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(Modifier.height(16.dp))
+            Button(onClick = onBukaInfoPaket) { Text("Lihat Paket") }
+        }
+    }
 }
