@@ -5,6 +5,10 @@ name: Generate Kode Lisensi
 on:
   workflow_dispatch:
     inputs:
+      device_id:
+        description: 'ID Perangkat pelanggan (12 karakter hex, mis. A1B2-C3D4-E5F6) - tampil di Pengaturan Toko / pesan WhatsApp mereka'
+        required: true
+        type: string
       tier:
         description: 'Tingkat paket'
         required: true
@@ -45,17 +49,18 @@ jobs:
         env:
           # Kunci PRIVAT lisensi (isi file license.private, 64 karakter hex) dari GitHub Secrets.
           NADA_LICENSE_PRIVATE_KEY: ${{ secrets.NADA_LICENSE_PRIVATE_KEY }}
+          DEVICE_ID: ${{ inputs.device_id }}
           TIER: ${{ inputs.tier }}
           EXPIRY_TYPE: ${{ inputs.expiry_type }}
           BULAN: ${{ inputs.bulan }}
           TANGGAL: ${{ inputs.tanggal }}
         run: |
           if [ "$EXPIRY_TYPE" = "LIFETIME" ]; then
-            python3 tools/generate_license.py --tier "$TIER" --expiry LIFETIME > hasil.txt
+            python3 tools/generate_license.py --tier "$TIER" --expiry LIFETIME --device "$DEVICE_ID" > hasil.txt
           elif [ "$EXPIRY_TYPE" = "BULAN" ]; then
-            python3 tools/generate_license.py --tier "$TIER" --bulan "$BULAN" > hasil.txt
+            python3 tools/generate_license.py --tier "$TIER" --bulan "$BULAN" --device "$DEVICE_ID" > hasil.txt
           else
-            python3 tools/generate_license.py --tier "$TIER" --expiry "$TANGGAL" > hasil.txt
+            python3 tools/generate_license.py --tier "$TIER" --expiry "$TANGGAL" --device "$DEVICE_ID" > hasil.txt
           fi
           cat hasil.txt
 
