@@ -27,17 +27,15 @@ private data class ItemPengaturan(
     val judul: String, val subjudul: String, val ikon: ImageVector, val onClick: () -> Unit
 )
 
-/**
- * Tab "Pengaturan" (hasil pengelompokan menu dari Dashboard).
- * Setiap pengguna (Admin maupun Kasir) memiliki akses ke Ganti Password Akun Saya dan Keluar.
- * Menu administratif hanya aktif untuk Admin.
- */
 @Composable
 fun PengaturanHubScreen(
     isAdmin: Boolean,
     onBukaPengaturanPrinter: () -> Unit,
     onBukaPengaturanToko: () -> Unit,
     onBukaPengguna: () -> Unit,
+    onBukaSupplier: () -> Unit,
+    onBukaOutlet: () -> Unit,
+    onBukaHutangPiutang: () -> Unit,
     onBukaBackup: () -> Unit,
     onBukaInfoPaket: () -> Unit,
     onLogout: () -> Unit,
@@ -50,6 +48,9 @@ fun PengaturanHubScreen(
     val itemAdmin = buildList {
         add(ItemPengaturan("Pengaturan Printer", "Kelola printer thermal Bluetooth", Icons.Filled.Print, onBukaPengaturanPrinter))
         add(ItemPengaturan("Pengaturan Toko", "Identitas toko, struk, dan warna aplikasi", Icons.Filled.Storefront, onBukaPengaturanToko))
+        add(ItemPengaturan("Supplier", "Kelola pemasok / vendor", Icons.Filled.LocalShipping, onBukaSupplier))
+        add(ItemPengaturan("Outlet / Cabang", "Kelola cabang dan lokasi", Icons.Filled.Store, onBukaOutlet))
+        add(ItemPengaturan("Hutang / Piutang", "Catat tagihan dan piutang", Icons.Filled.AccountBalanceWallet, onBukaHutangPiutang))
         if (paketAktif.mencakup(PaketAplikasi.PRO)) {
             add(ItemPengaturan("Manajemen Pengguna", "Kelola akun admin dan kasir", Icons.Filled.Group, onBukaPengguna))
         }
@@ -73,19 +74,13 @@ fun PengaturanHubScreen(
 
             item {
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    "Keamanan Akun",
-                    style = MaterialTheme.typography.labelLarge.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-                BarisPengaturan(
-                    ItemPengaturan(
-                        judul = "Ganti Password Saya",
-                        subjudul = "Ubah kata sandi akun ${viewModel.currentUserName}",
-                        ikon = Icons.Filled.Lock,
-                        onClick = { showDialogGantiPassword = true }
-                    )
-                )
+                Text("Keamanan Akun", style = MaterialTheme.typography.labelLarge.copy(color = MaterialTheme.colorScheme.onSurfaceVariant), modifier = Modifier.padding(vertical = 8.dp))
+                BarisPengaturan(ItemPengaturan(
+                    judul = "Ganti Password Saya",
+                    subjudul = "Ubah kata sandi akun ${viewModel.currentUserName}",
+                    ikon = Icons.Filled.Lock,
+                    onClick = { showDialogGantiPassword = true }
+                ))
             }
 
             item { Spacer(Modifier.height(16.dp)) }
@@ -139,39 +134,12 @@ private fun DialogGantiPasswordHub(
         title = { Text("Ganti Password Akun") },
         text = {
             Column {
-                OutlinedTextField(
-                    value = passwordLama,
-                    onValueChange = { passwordLama = it },
-                    label = { Text("Password Saat Ini") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                OutlinedTextField(value = passwordLama, onValueChange = { passwordLama = it }, label = { Text("Password Saat Ini") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = passwordBaru,
-                    onValueChange = { passwordBaru = it },
-                    label = { Text("Password Baru (min 6 karakter)") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                OutlinedTextField(value = passwordBaru, onValueChange = { passwordBaru = it }, label = { Text("Password Baru (min 6 karakter)") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = konfirmasiPassword,
-                    onValueChange = { konfirmasiPassword = it },
-                    label = { Text("Ulangi Password Baru") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                errorText?.let {
-                    Spacer(Modifier.height(4.dp))
-                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
+                OutlinedTextField(value = konfirmasiPassword, onValueChange = { konfirmasiPassword = it }, label = { Text("Ulangi Password Baru") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), modifier = Modifier.fillMaxWidth())
+                errorText?.let { Spacer(Modifier.height(4.dp)); Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {
@@ -206,14 +174,8 @@ private fun BarisPengaturan(item: ItemPengaturan, warna: Color = MaterialTheme.c
         tonalElevation = 1.dp,
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier.size(40.dp).background(warna.copy(alpha = 0.12f), RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.Center
-            ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(40.dp).background(warna.copy(alpha = 0.12f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
                 Icon(item.ikon, contentDescription = null, tint = warna, modifier = Modifier.size(22.dp))
             }
             Spacer(Modifier.width(14.dp))
@@ -221,10 +183,7 @@ private fun BarisPengaturan(item: ItemPengaturan, warna: Color = MaterialTheme.c
                 Text(item.judul, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium))
                 Text(item.subjudul, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Icon(
-                Icons.Filled.ChevronRight, contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-            )
+            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
         }
     }
 }

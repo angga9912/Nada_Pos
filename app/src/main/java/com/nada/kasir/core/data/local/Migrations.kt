@@ -3,24 +3,57 @@ package com.nada.kasir.core.data.local
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-val MIGRATION_1_2 = object : Migration(1, 2) {
+val MIGRATION_3_4 = object : Migration(3, 4) {
     override fun migrate(db: SupportSQLiteDatabase) {
-        // v1 -> v2: tambah kolom nomorAntrian dan namaPembeli pada transaksi
-        db.execSQL("ALTER TABLE transactions ADD COLUMN nomorAntrian INTEGER NOT NULL DEFAULT 0")
-        db.execSQL("ALTER TABLE transactions ADD COLUMN namaPembeli TEXT DEFAULT NULL")
-    }
-}
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS outlets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                nama TEXT NOT NULL,
+                kode TEXT NOT NULL,
+                alamat TEXT NOT NULL DEFAULT '',
+                telepon TEXT NOT NULL DEFAULT '',
+                aktif INTEGER NOT NULL DEFAULT 1,
+                createdAt INTEGER NOT NULL DEFAULT 0,
+                updatedAt INTEGER NOT NULL DEFAULT 0
+            )
+            """.trimIndent()
+        )
 
-/**
- * v2 -> v3: tambah kolom [PaymentEntity.catatanMetode] (nullable) untuk menyimpan
- * nama metode manual saat kasir memilih "Lainnya" (mis. "Transfer BCA").
- *
- * WAJIB didaftarkan di DatabaseModule via .addMigrations(MIGRATION_2_3) - tanpa ini,
- * fallbackToDestructiveMigration() akan MENGHAPUS SELURUH data lokal (produk,
- * transaksi, stok) saat pengguna update ke versi dengan skema baru ini.
- */
-val MIGRATION_2_3 = object : Migration(2, 3) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-        db.execSQL("ALTER TABLE payments ADD COLUMN catatanMetode TEXT DEFAULT NULL")
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS suppliers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                nama TEXT NOT NULL,
+                kontak TEXT NOT NULL DEFAULT '',
+                telepon TEXT NOT NULL DEFAULT '',
+                alamat TEXT NOT NULL DEFAULT '',
+                npwp TEXT NOT NULL DEFAULT '',
+                catatan TEXT NOT NULL DEFAULT '',
+                aktif INTEGER NOT NULL DEFAULT 1,
+                createdAt INTEGER NOT NULL DEFAULT 0,
+                updatedAt INTEGER NOT NULL DEFAULT 0
+            )
+            """.trimIndent()
+        )
+
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS hutang_piutang (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                jenis TEXT NOT NULL,
+                pelaku TEXT NOT NULL,
+                nomorReferensi TEXT,
+                jumlah REAL NOT NULL DEFAULT 0,
+                sisa REAL NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'AKTIF',
+                tanggalTransaksi INTEGER NOT NULL DEFAULT 0,
+                tanggalJatuhTempo INTEGER,
+                keterangan TEXT,
+                createdAt INTEGER NOT NULL DEFAULT 0,
+                updatedAt INTEGER NOT NULL DEFAULT 0
+            )
+            """.trimIndent()
+        )
     }
 }
