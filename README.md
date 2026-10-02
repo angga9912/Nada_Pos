@@ -425,6 +425,8 @@ di ZIP ini, jadi tidak perlu setup tambahan.
 - [x] `PembayaranCalculatorTest` — kembalian & validasi cukup/kurang bayar
 - [x] `CurrencyFormatterTest` — format Rupiah dengan pemisah ribuan
 - [x] `PasswordHasherTest` — password tidak pernah plain text
+- [x] `MutasiStokManualTest` — perubahan stok manual selalu tercatat (jumlah mutasi = stok akhir)
+- [x] `PemetaanReferensiMutasiTest` — restore memetakan referensi transaksi pada mutasi stok ke id baru
 - [x] `UserRepositoryTest` — seed akun pertama hanya saat kosong, password bawaan ditolak sebagai password baru
 - [x] `LicenseKeyValidatorTest`, `PerangkatIdTest`, `WaktuLisensiTest` — lisensi terikat perangkat & pelindung jam
 

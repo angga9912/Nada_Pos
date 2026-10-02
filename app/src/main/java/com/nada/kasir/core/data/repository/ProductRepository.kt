@@ -2,7 +2,9 @@ package com.nada.kasir.core.data.repository
 
 import com.nada.kasir.core.data.local.AppDatabase
 import com.nada.kasir.core.data.local.dao.ProductDao
+import com.nada.kasir.core.data.local.dao.StockMovementDao
 import com.nada.kasir.core.data.local.entity.ProductEntity
+import com.nada.kasir.core.domain.logic.MutasiStokManual
 import com.nada.kasir.core.excel.ProdukRowValidationResult
 import com.nada.kasir.core.util.AppError
 import com.nada.kasir.core.util.Result
@@ -14,6 +16,7 @@ import javax.inject.Singleton
 @Singleton
 class ProductRepository @Inject constructor(
     private val productDao: ProductDao,
+    private val stockMovementDao: StockMovementDao,
     private val appDatabase: AppDatabase
 ) {
     fun observeActive(): Flow<List<ProductEntity>> = productDao.observeActiveProducts()
@@ -40,11 +43,24 @@ class ProductRepository @Inject constructor(
             }
         }
         return try {
-            val id = if (product.id == 0L) {
-                productDao.insert(product)
-            } else {
-                productDao.update(product)
-                product.id
+            // Simpan produk + catat mutasi stoknya dalam SATU transaksi database (F-05): perubahan stok
+            // lewat form produk sebelumnya mengubah angka stok tanpa jejak sama sekali.
+            val id = appDatabase.withTransaction {
+                val sekarang = System.currentTimeMillis()
+                if (product.id == 0L) {
+                    val idBaru = productDao.insert(product)
+                    MutasiStokManual.buat(idBaru, 0, product.stok, MutasiStokManual.KET_STOK_AWAL, sekarang)
+                        ?.let { stockMovementDao.insert(it) }
+                    idBaru
+                } else {
+                    // Selisih dihitung terhadap stok yang SEKARANG ada di database, bukan angka yang
+                    // tampil di form saat dialog dibuka (bisa sudah berubah karena ada penjualan).
+                    val stokDiDatabase = productDao.getStok(product.id)
+                    productDao.update(product)
+                    MutasiStokManual.buat(product.id, stokDiDatabase, product.stok, MutasiStokManual.KET_PENYESUAIAN, sekarang)
+                        ?.let { stockMovementDao.insert(it) }
+                    product.id
+                }
             }
             Result.Success(id)
         } catch (e: Exception) {
@@ -79,13 +95,16 @@ class ProductRepository @Inject constructor(
                         dilewati.add("${b.kodeProduk} (barcode sudah terdaftar)")
                     }
                     else -> {
-                        productDao.insert(
+                        val idBaru = productDao.insert(
                             ProductEntity(
                                 kodeProduk = b.kodeProduk, barcode = b.barcode, nama = b.nama,
                                 categoryId = null, hargaBeli = b.hargaBeli, hargaJual = b.hargaJual,
                                 stok = b.stok, stokMinimum = 5
                             )
                         )
+                        MutasiStokManual.buat(
+                            idBaru, 0, b.stok, MutasiStokManual.KET_STOK_AWAL_IMPORT, System.currentTimeMillis()
+                        )?.let { stockMovementDao.insert(it) }
                         jumlahBerhasil++
                     }
                 }

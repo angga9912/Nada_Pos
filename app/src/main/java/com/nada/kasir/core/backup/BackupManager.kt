@@ -257,8 +257,6 @@ class BackupManager @Inject constructor(
                 if (printers.isNotEmpty()) printerDao.insertAll(printers)
                 settings.filter { it.key !in KunciPengaturanLisensi.SEMUA }.forEach { settingDao.upsert(it) }
                 lisensiSaatIni.forEach { settingDao.upsert(it) }
-                if (stockMovements.isNotEmpty()) stockMovementDao.insertAll(stockMovements)
-
                 run {
                     val petaIdLamaKeBaru = mutableMapOf<Long, Long>()
                     for (i in 0 until transaksiJsonArray.length()) {
@@ -286,6 +284,12 @@ class BackupManager @Inject constructor(
                         }
                         if (payments.isNotEmpty()) transactionDao.insertAllPayments(payments)
                     }
+
+                    // Mutasi stok disisipkan SETELAH transaksi, karena id transaksi berubah saat restore:
+                    // referensiTransaksiId harus dipetakan ke id baru (F-06), kalau tidak ia menunjuk ke
+                    // transaksi lain yang kebetulan memakai id yang sama.
+                    val mutasiSiap = PemetaanReferensiMutasi.petakan(stockMovements, petaIdLamaKeBaru)
+                    if (mutasiSiap.isNotEmpty()) stockMovementDao.insertAll(mutasiSiap)
                 }
             }
             Result.Success(Unit)
