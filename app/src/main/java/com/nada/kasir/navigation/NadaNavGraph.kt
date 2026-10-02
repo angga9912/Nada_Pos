@@ -22,28 +22,33 @@ import com.nada.kasir.core.paket.PaketAplikasi
 import com.nada.kasir.core.session.SessionManager
 import com.nada.kasir.feature.backup.BackupScreen
 import com.nada.kasir.feature.dashboard.DashboardScreen
+import com.nada.kasir.feature.hutang_piutang.HutangPiutangScreen
 import com.nada.kasir.feature.info_paket.InfoPaketScreen
 import com.nada.kasir.feature.kasir.KasirScreen
 import com.nada.kasir.feature.laporan.LaporanScreen
 import com.nada.kasir.feature.login.LoginScreen
 import com.nada.kasir.feature.onboarding.OnboardingPreference
 import com.nada.kasir.feature.onboarding.OnboardingScreen
+import com.nada.kasir.feature.outlet.OutletScreen
 import com.nada.kasir.feature.pengaturan_hub.PengaturanHubScreen
 import com.nada.kasir.feature.pengaturan_printer.PengaturanPrinterScreen
 import com.nada.kasir.feature.pengaturan_toko.PengaturanTokoScreen
-import com.nada.kasir.feature.pengguna.PenggunaScreen
 import com.nada.kasir.feature.produk.ProdukScreen
 import com.nada.kasir.feature.riwayat.RiwayatScreen
+import com.nada.kasir.feature.supplier.SupplierScreen
 
 sealed class NadaRoute(val route: String) {
     object Onboarding : NadaRoute("onboarding")
     object Login : NadaRoute("login")
-    object MainShell : NadaRoute("main_shell") // berisi Home/Kasir/Produk/Riwayat/Pengaturan dengan bottom nav
+    object MainShell : NadaRoute("main_shell")
     object PengaturanPrinter : NadaRoute("pengaturan_printer")
     object Backup : NadaRoute("backup")
     object Laporan : NadaRoute("laporan")
     object PengaturanToko : NadaRoute("pengaturan_toko")
     object Pengguna : NadaRoute("pengguna")
+    object Supplier : NadaRoute("supplier")
+    object Outlet : NadaRoute("outlet")
+    object HutangPiutang : NadaRoute("hutang_piutang")
     object InfoPaket : NadaRoute("info_paket")
 }
 
@@ -55,7 +60,6 @@ private enum class TabUtama(val label: String, val ikon: androidx.compose.ui.gra
     LAINNYA("Lainnya", Icons.Filled.Settings)
 }
 
-// Warna navigasi - dipakai bar bawah DAN rel samping (mode layar pendek) supaya tampilannya konsisten.
 private val WarnaNavAktif = Color(0xFF1976D2)
 private val WarnaNavIndikator = Color(0xFFE3F2FD)
 private val WarnaNavNonaktif = Color(0xFF64748B)
@@ -95,14 +99,10 @@ fun NadaNavGraph(navController: NavHostController = rememberNavController()) {
             )
         }
         composable(NadaRoute.PengaturanPrinter.route) {
-            AdminRouteGuard(sessionManager, navController) {
-                PengaturanPrinterScreen()
-            }
+            AdminRouteGuard(sessionManager, navController) { PengaturanPrinterScreen() }
         }
         composable(NadaRoute.Backup.route) {
-            AdminRouteGuard(sessionManager, navController) {
-                BackupScreen()
-            }
+            AdminRouteGuard(sessionManager, navController) { BackupScreen() }
         }
         composable(NadaRoute.Laporan.route) {
             AdminRouteGuard(sessionManager, navController) {
@@ -114,15 +114,22 @@ fun NadaNavGraph(navController: NavHostController = rememberNavController()) {
             }
         }
         composable(NadaRoute.PengaturanToko.route) {
-            AdminRouteGuard(sessionManager, navController) {
-                PengaturanTokoScreen()
-            }
+            AdminRouteGuard(sessionManager, navController) { PengaturanTokoScreen() }
         }
         composable(NadaRoute.Pengguna.route) {
             AdminRouteGuard(sessionManager, navController) {
                 val currentUserId = sessionManager.currentUser.value?.id ?: 1L
-                PenggunaScreen(currentUserId = currentUserId)
+                com.nada.kasir.feature.pengguna.PenggunaScreen(currentUserId = currentUserId)
             }
+        }
+        composable(NadaRoute.Supplier.route) {
+            AdminRouteGuard(sessionManager, navController) { SupplierScreen() }
+        }
+        composable(NadaRoute.Outlet.route) {
+            AdminRouteGuard(sessionManager, navController) { OutletScreen() }
+        }
+        composable(NadaRoute.HutangPiutang.route) {
+            AdminRouteGuard(sessionManager, navController) { HutangPiutangScreen() }
         }
         composable(NadaRoute.InfoPaket.route) {
             InfoPaketScreen(onKembali = { navController.popBackStack() })
@@ -130,11 +137,6 @@ fun NadaNavGraph(navController: NavHostController = rememberNavController()) {
     }
 }
 
-/**
- * Route Guard untuk membatasi akses halaman sensitif/administratif (RBAC).
- * Jika belum login -> diarahkan ke Login.
- * Jika login sebagai Kasir -> diblokir dengan pesan Akses Dibatasi.
- */
 @Composable
 private fun AdminRouteGuard(
     sessionManager: SessionManager,
@@ -145,30 +147,16 @@ private fun AdminRouteGuard(
 
     if (currentUser == null) {
         LaunchedEffect(Unit) {
-            navController.navigate(NadaRoute.Login.route) {
-                popUpTo(0) { inclusive = true }
-            }
+            navController.navigate(NadaRoute.Login.route) { popUpTo(0) { inclusive = true } }
         }
     } else if (currentUser?.role != UserRole.ADMIN) {
-        Box(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
-            contentAlignment = Alignment.Center
-        ) {
+        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    "Akses Dibatasi",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.error
-                )
+                Text("Akses Dibatasi", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.error)
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    "Halaman ini memerlukan hak akses Administrator.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Text("Halaman ini memerlukan hak akses Administrator.", style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(16.dp))
-                Button(onClick = { navController.popBackStack() }) {
-                    Text("Kembali")
-                }
+                Button(onClick = { navController.popBackStack() }) { Text("Kembali") }
             }
         }
     } else {
@@ -176,13 +164,6 @@ private fun AdminRouteGuard(
     }
 }
 
-/**
- * Shell dengan Bottom Navigation (poin 6 brief redesign). Tab di-switch dengan
- * state lokal (bukan back-stack terpisah) karena ini murni navigasi UI antar
- * tab utama - tidak ada perubahan pada logic/data di baliknya.
- * Menu administratif (Laporan, Pengaturan Printer/Toko, Pengguna, Backup)
- * tetap dibuka lewat NavController luar (poin 5: dikelompokkan, tapi tetap mudah ditemukan).
- */
 @Composable
 private fun MainShell(
     navController: NavHostController,
@@ -190,10 +171,6 @@ private fun MainShell(
     paketAktif: PaketAplikasi
 ) {
     var tabAktif by rememberSaveable { mutableStateOf(TabUtama.KASIR) }
-
-    // Penjaga sesi: NavController memulihkan back stack (termasuk layar ini) setelah proses aplikasi
-    // dimatikan sistem, tetapi SessionManager hanya ada di memori dan sudah kosong. Tanpa penjaga ini
-    // layar kasir bisa terbuka tanpa login dan transaksi tercatat atas user ID palsu.
     val penggunaAktif by sessionManager.currentUser.collectAsState()
     val pengguna = penggunaAktif
     if (pengguna == null) {
@@ -205,33 +182,16 @@ private fun MainShell(
     val isAdmin = pengguna.role == UserRole.ADMIN
     val currentUserId = pengguna.id
 
-    // Cukup mengosongkan sesi: penjaga di atas yang mengarahkan ke Login (satu jalur navigasi saja,
-    // supaya tidak terjadi dua navigasi ke Login sekaligus).
-    fun logout() {
-        sessionManager.logout()
-    }
+    fun logout() { sessionManager.logout() }
 
-    // Isi tiap tab dipisah jadi lambda supaya bisa dipakai di dua susunan layar (bar bawah untuk
-    // layar normal, rel samping untuk layar pendek) tanpa menyalin blok `when` dua kali.
     val isiTab: @Composable () -> Unit = {
         when (tabAktif) {
-            TabUtama.KASIR -> KasirScreen(
-                currentUserId = currentUserId,
-                isAdmin = isAdmin,
-                onBukaInfoPaket = { navController.navigate(NadaRoute.InfoPaket.route) }
-            )
+            TabUtama.KASIR -> KasirScreen(currentUserId = currentUserId, isAdmin = isAdmin, onBukaInfoPaket = { navController.navigate(NadaRoute.InfoPaket.route) })
             TabUtama.PRODUK -> ProdukScreen(isAdmin = isAdmin)
             TabUtama.LAPORAN -> {
                 if (!isAdmin) {
-                    Box(
-                        modifier = Modifier.fillMaxSize().padding(24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "Laporan hanya dapat diakses oleh Administrator.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error
-                        )
+                    Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Text("Laporan hanya dapat diakses oleh Administrator.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                     }
                 } else if (!paketAktif.mencakup(PaketAplikasi.CUSTOM)) {
                     LaporanTerkunci(onBukaInfoPaket = { navController.navigate(NadaRoute.InfoPaket.route) })
@@ -245,6 +205,9 @@ private fun MainShell(
                 onBukaPengaturanPrinter = { navController.navigate(NadaRoute.PengaturanPrinter.route) },
                 onBukaPengaturanToko = { navController.navigate(NadaRoute.PengaturanToko.route) },
                 onBukaPengguna = { navController.navigate(NadaRoute.Pengguna.route) },
+                onBukaSupplier = { navController.navigate(NadaRoute.Supplier.route) },
+                onBukaOutlet = { navController.navigate(NadaRoute.Outlet.route) },
+                onBukaHutangPiutang = { navController.navigate(NadaRoute.HutangPiutang.route) },
                 onBukaBackup = { navController.navigate(NadaRoute.Backup.route) },
                 onBukaInfoPaket = { navController.navigate(NadaRoute.InfoPaket.route) },
                 onLogout = ::logout
@@ -252,30 +215,18 @@ private fun MainShell(
         }
     }
 
-    // Layar PENDEK (tinggi < 480dp = "compact height" Material, contohnya HP dimiringkan):
-    // bar navigasi bawah memakan ~80dp dari total tinggi yang cuma ~400dp, jadi diganti rel
-    // navigasi ramping di sisi kiri - tinggi konten (grid produk, keranjang) jadi penuh dan semua
-    // tab tetap terjangkau. Layar normal (portrait, tablet) tampil persis seperti sebelumnya.
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val layarPendek = maxHeight < 480.dp
         Scaffold(
             bottomBar = {
                 if (!layarPendek) {
-                    NavigationBar(
-                        containerColor = Color.White,
-                        tonalElevation = 4.dp
-                    ) {
+                    NavigationBar(containerColor = Color.White, tonalElevation = 4.dp) {
                         TabUtama.values().forEach { tab ->
                             NavigationBarItem(
                                 selected = tabAktif == tab,
                                 onClick = { tabAktif = tab },
                                 icon = { Icon(tab.ikon, contentDescription = tab.label) },
-                                label = {
-                                    Text(
-                                        tab.label,
-                                        fontWeight = if (tabAktif == tab) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal
-                                    )
-                                },
+                                label = { Text(tab.label) },
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = WarnaNavAktif,
                                     selectedTextColor = WarnaNavAktif,
@@ -297,12 +248,7 @@ private fun MainShell(
                                 selected = tabAktif == tab,
                                 onClick = { tabAktif = tab },
                                 icon = { Icon(tab.ikon, contentDescription = tab.label) },
-                                label = {
-                                    Text(
-                                        tab.label,
-                                        fontWeight = if (tabAktif == tab) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal
-                                    )
-                                },
+                                label = { Text(tab.label) },
                                 colors = NavigationRailItemDefaults.colors(
                                     selectedIconColor = WarnaNavAktif,
                                     selectedTextColor = WarnaNavAktif,
@@ -322,23 +268,13 @@ private fun MainShell(
     }
 }
 
-/** Ditampilkan menggantikan Laporan untuk paket BASIC (Laporan = fitur paket CUSTOM ke atas). */
 @Composable
 private fun LaporanTerkunci(onBukaInfoPaket: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        contentAlignment = Alignment.Center
-    ) {
+    Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                "Laporan tersedia di paket Custom dan Pro",
-                style = MaterialTheme.typography.titleMedium
-            )
+            Text("Laporan tersedia di paket Custom dan Pro", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
-            Text(
-                "Upgrade paket untuk melihat laporan penjualan harian, bulanan, dan stok.",
-                style = MaterialTheme.typography.bodyMedium
-            )
+            Text("Upgrade paket untuk melihat laporan penjualan harian, bulanan, dan stok.", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(16.dp))
             Button(onClick = onBukaInfoPaket) { Text("Lihat Paket") }
         }
