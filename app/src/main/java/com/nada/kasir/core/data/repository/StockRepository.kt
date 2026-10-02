@@ -21,7 +21,7 @@ class StockRepository @Inject constructor(
     fun observeRiwayat(): Flow<List<StockMovementEntity>> = stockMovementDao.observeAll()
 
     /** Stok Masuk - menambah stok produk dan mencatat mutasi secara atomik. */
-    suspend fun stokMasuk(productId: Long, qty: Int, hargaBeli: Double?, supplier: String?, keterangan: String?): Result<Unit> {
+    suspend fun stokMasuk(productId: Long, qty: Int, hargaBeli: Double?, supplierId: Long?, keterangan: String?): Result<Unit> {
         return try {
             appDatabase.withTransaction {
                 productDao.increaseStock(productId, qty)
@@ -30,7 +30,7 @@ class StockRepository @Inject constructor(
                         productId = productId,
                         tipe = TipeMutasiStok.MASUK,
                         qty = qty,
-                        supplier = supplier,
+                        supplierId = supplierId,
                         keterangan = keterangan,
                         tanggalWaktu = System.currentTimeMillis()
                     )
