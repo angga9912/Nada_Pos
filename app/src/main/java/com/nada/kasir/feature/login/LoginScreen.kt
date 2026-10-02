@@ -68,6 +68,56 @@ fun LoginScreen(
         )
     }
 
+    // F-09: login dengan password bawaan wajib diikuti pembuatan password baru. Dialog ini tidak bisa
+    // ditutup dengan tap di luar atau tombol back; satu-satunya jalan keluar adalah ganti password
+    // atau Batal (kembali ke form login tanpa masuk).
+    state.perluGantiPassword?.let {
+        var passwordBaru by remember { mutableStateOf("") }
+        var konfirmasi by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("Buat Password Baru") },
+            text = {
+                Column {
+                    Text("Password bawaan aplikasi tidak boleh dipakai lagi. Buat password baru (minimal 6 karakter) untuk melanjutkan.")
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = passwordBaru,
+                        onValueChange = { passwordBaru = it },
+                        label = { Text("Password baru") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = konfirmasi,
+                        onValueChange = { konfirmasi = it },
+                        label = { Text("Ulangi password baru") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    state.errorGantiPassword?.let { pesan ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(pesan, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !state.sedangGantiPassword,
+                    onClick = { viewModel.gantiPasswordAwal(passwordBaru, konfirmasi) }
+                ) { Text(if (state.sedangGantiPassword) "Menyimpan..." else "Simpan & Masuk") }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.batalGantiPassword() }) { Text("Batal") }
+            }
+        )
+    }
+
     state.errorPesan?.let { pesan ->
         AlertDialog(
             onDismissRequest = { viewModel.clearError() },

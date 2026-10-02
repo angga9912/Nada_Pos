@@ -17,6 +17,10 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE id = :id LIMIT 1")
     suspend fun findById(id: Long): UserEntity?
 
+    /** Jumlah SEMUA pengguna (aktif maupun nonaktif) - dipakai untuk menentukan first-run. */
+    @Query("SELECT COUNT(*) FROM users")
+    suspend fun count(): Int
+
     @Query("SELECT * FROM users")
     fun observeAll(): Flow<List<UserEntity>>
 

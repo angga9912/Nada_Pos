@@ -14,6 +14,21 @@ import javax.inject.Singleton
 class UserRepository @Inject constructor(
     private val userDao: UserDao
 ) {
+    companion object {
+        /** Password akun pertama yang dibuat otomatis. Pengguna WAJIB menggantinya di login pertama. */
+        const val PASSWORD_ADMIN_DEFAULT = "admin123"
+
+        /** true jika [passwordPlain] adalah password bawaan aplikasi (yang publik di README/APK). */
+        fun passwordTergolongDefault(passwordPlain: String): Boolean = passwordPlain == PASSWORD_ADMIN_DEFAULT
+
+        /** Aturan password baru yang berlaku di semua jalur (buat, ganti, reset). Null = valid. */
+        internal fun pesanPasswordTidakValid(passwordBaru: String, awalan: String = "Password"): String? = when {
+            passwordBaru.length < 6 -> "$awalan minimal 6 karakter."
+            passwordTergolongDefault(passwordBaru) -> "$awalan tidak boleh sama dengan password bawaan aplikasi."
+            else -> null
+        }
+    }
+
     fun observeAll(): Flow<List<UserEntity>> = userDao.observeAll()
 
     /** ADMIN: Mengelola pengguna (poin 18). Password selalu di-hash dengan PBKDF2. */
@@ -22,9 +37,7 @@ class UserRepository @Inject constructor(
         if (userDao.findByUsernameAnyStatus(bersihUsername) != null) {
             return Result.Failure(AppError.Lainnya("Username sudah dipakai."))
         }
-        if (passwordPlain.length < 6) {
-            return Result.Failure(AppError.Lainnya("Password minimal 6 karakter."))
-        }
+        pesanPasswordTidakValid(passwordPlain)?.let { return Result.Failure(AppError.Lainnya(it)) }
         val id = userDao.insert(
             UserEntity(
                 nama = nama.trim(),
@@ -64,9 +77,8 @@ class UserRepository @Inject constructor(
 
     /** Ganti password mandiri (pengguna harus tahu password lama). */
     suspend fun gantiPassword(userId: Long, passwordLama: String, passwordBaru: String): Result<Unit> {
-        if (passwordBaru.length < 6) {
-            return Result.Failure(AppError.Lainnya("Password baru minimal 6 karakter."))
-        }
+        pesanPasswordTidakValid(passwordBaru, awalan = "Password baru")
+            ?.let { return Result.Failure(AppError.Lainnya(it)) }
         val user = userDao.findById(userId)
             ?: return Result.Failure(AppError.Lainnya("Pengguna tidak ditemukan."))
 
@@ -80,9 +92,8 @@ class UserRepository @Inject constructor(
 
     /** Reset password oleh Admin (tidak butuh password lama). */
     suspend fun resetPasswordOlehAdmin(targetUserId: Long, passwordBaru: String): Result<Unit> {
-        if (passwordBaru.length < 6) {
-            return Result.Failure(AppError.Lainnya("Password baru minimal 6 karakter."))
-        }
+        pesanPasswordTidakValid(passwordBaru, awalan = "Password baru")
+            ?.let { return Result.Failure(AppError.Lainnya(it)) }
         val target = userDao.findById(targetUserId)
             ?: return Result.Failure(AppError.Lainnya("Pengguna tidak ditemukan."))
 
@@ -108,20 +119,25 @@ class UserRepository @Inject constructor(
         return Result.Success(Unit)
     }
 
-    /** Dipanggil sekali saat aplikasi pertama kali dijalankan (poin 23: mode demo / first-run). */
+    /**
+     * Dipanggil saat layar login dibuka (poin 23: mode demo / first-run).
+     *
+     * Akun bawaan HANYA dibuat kalau tabel pengguna benar-benar kosong (aplikasi baru). Sebelumnya
+     * yang dicek adalah akun "admin" yang AKTIF, sehingga begitu akun itu dinonaktifkan, akun
+     * "admin" baru dengan password bawaan yang publik otomatis muncul lagi (F-09).
+     *
+     * @return akun yang baru dibuat, atau null jika tidak ada yang dibuat.
+     */
     suspend fun pastikanAdaAdminDefault(): UserEntity? {
-        val sudahAdaUser = userDao.findByUsername("admin") != null
-        if (!sudahAdaUser) {
-            userDao.insert(
-                UserEntity(
-                    nama = "Administrator",
-                    username = "admin",
-                    passwordHash = PasswordHasher.hash("admin123"),
-                    role = UserRole.ADMIN
-                )
+        if (userDao.count() > 0) return null
+        val id = userDao.insert(
+            UserEntity(
+                nama = "Administrator",
+                username = "admin",
+                passwordHash = PasswordHasher.hash(PASSWORD_ADMIN_DEFAULT),
+                role = UserRole.ADMIN
             )
-            return userDao.findByUsername("admin")
-        }
-        return null
+        )
+        return userDao.findById(id)
     }
 }

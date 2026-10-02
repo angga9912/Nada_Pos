@@ -18,7 +18,11 @@ data class LoginUiState(
     val errorPesan: String? = null,
     val loginBerhasil: UserEntity? = null,
     val infoAdminDefault: String? = null,
-    val sisaDetikLockout: Int = 0
+    val sisaDetikLockout: Int = 0,
+    /** Login dengan password bawaan berhasil, tapi sesi BELUM dibuka sampai password diganti (F-09). */
+    val perluGantiPassword: UserEntity? = null,
+    val errorGantiPassword: String? = null,
+    val sedangGantiPassword: Boolean = false
 )
 
 @HiltViewModel
@@ -46,7 +50,9 @@ class LoginViewModel @Inject constructor(
             val adminBaru = userRepository.pastikanAdaAdminDefault()
             if (adminBaru != null) {
                 _uiState.value = _uiState.value.copy(
-                    infoAdminDefault = "Akun pertama dibuat otomatis - Username: admin, Password: admin123. Segera ganti password setelah login demi keamanan toko Anda."
+                    infoAdminDefault = "Akun pertama dibuat otomatis - Username: ${adminBaru.username}, " +
+                        "Password: ${UserRepository.PASSWORD_ADMIN_DEFAULT}. Setelah login pertama Anda akan " +
+                        "diminta membuat password baru demi keamanan toko Anda."
                 )
             }
         }
@@ -76,12 +82,23 @@ class LoginViewModel @Inject constructor(
                 is Result.Success -> {
                     percobaanGagal = 0
                     lockoutSampaiMillis = 0L
-                    sessionManager.login(result.data)
-                    _uiState.value = _uiState.value.copy(
-                        sedangProses = false,
-                        loginBerhasil = result.data,
-                        sisaDetikLockout = 0
-                    )
+                    if (UserRepository.passwordTergolongDefault(password)) {
+                        // Password bawaan aplikasi bersifat publik: akun TIDAK boleh dipakai sebelum
+                        // pemiliknya membuat password sendiri. Sesi sengaja belum dibuka di sini.
+                        _uiState.value = _uiState.value.copy(
+                            sedangProses = false,
+                            perluGantiPassword = result.data,
+                            errorGantiPassword = null,
+                            sisaDetikLockout = 0
+                        )
+                    } else {
+                        sessionManager.login(result.data)
+                        _uiState.value = _uiState.value.copy(
+                            sedangProses = false,
+                            loginBerhasil = result.data,
+                            sisaDetikLockout = 0
+                        )
+                    }
                 }
                 is Result.Failure -> {
                     percobaanGagal++
@@ -103,6 +120,38 @@ class LoginViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    /** Menyelesaikan login pertama: mengganti password bawaan, lalu membuka sesi. */
+    fun gantiPasswordAwal(passwordBaru: String, konfirmasi: String) {
+        val user = _uiState.value.perluGantiPassword ?: return
+        if (passwordBaru != konfirmasi) {
+            _uiState.value = _uiState.value.copy(errorGantiPassword = "Konfirmasi password tidak sama.")
+            return
+        }
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(sedangGantiPassword = true, errorGantiPassword = null)
+            // Password lama = password bawaan: login barusan membuktikan itulah password akun ini.
+            when (val hasil = userRepository.gantiPassword(user.id, UserRepository.PASSWORD_ADMIN_DEFAULT, passwordBaru)) {
+                is Result.Success -> {
+                    sessionManager.login(user)
+                    _uiState.value = _uiState.value.copy(
+                        sedangGantiPassword = false,
+                        perluGantiPassword = null,
+                        loginBerhasil = user
+                    )
+                }
+                is Result.Failure -> _uiState.value = _uiState.value.copy(
+                    sedangGantiPassword = false,
+                    errorGantiPassword = hasil.error.pesan
+                )
+            }
+        }
+    }
+
+    /** Batal ganti password: kembali ke form login tanpa membuka sesi. */
+    fun batalGantiPassword() {
+        _uiState.value = _uiState.value.copy(perluGantiPassword = null, errorGantiPassword = null)
     }
 
     fun clearError() { _uiState.value = _uiState.value.copy(errorPesan = null) }

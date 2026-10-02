@@ -261,7 +261,10 @@ Sudah ditambahkan di atas Phase 1-3:
   semua menu; **KASIR** hanya melihat Transaksi, Lihat Produk (read-only), Riwayat
   (bisa cetak ulang, TIDAK BISA membatalkan transaksi) — sesuai poin 18.
   Akun pertama (`admin` / `admin123`) dibuat otomatis saat first-run, dengan
-  pemberitahuan untuk segera diganti.
+  pemberitahuan. Login dengan password bawaan **tidak membuka aplikasi**: pengguna wajib membuat
+  password baru dulu (password bawaan juga ditolak sebagai password baru, di semua jalur ganti/reset/
+  buat akun). Akun bawaan hanya dibuat saat tabel pengguna benar-benar kosong, jadi menonaktifkan
+  akun `admin` tidak memunculkan akun bawaan baru.
 - ✅ **Manajemen Pengguna** (khusus Admin) — tambah akun Kasir/Admin baru, password
   selalu di-hash (poin 26), lihat status aktif/nonaktif.
 - ✅ **Pengaturan Toko** (poin 1, akhirnya dibuatkan UI-nya) — nama, alamat, WA,
@@ -277,7 +280,7 @@ Sudah ditambahkan di atas Phase 1-3:
 ### Catatan Pengujian Phase 4
 
 - Login pertama kali pakai `admin` / `admin123` (muncul otomatis di dialog saat
-  akun ini baru dibuat). Segera buat akun Kasir baru lewat Manajemen Pengguna,
+  akun ini baru dibuat). Aplikasi langsung meminta password baru; setelah itu buat akun Kasir baru lewat Manajemen Pengguna,
   lalu coba login sebagai Kasir untuk memverifikasi menu yang disembunyikan.
 - Ubah warna di Pengaturan Toko, lalu kembali ke Dashboard — tombol-tombol
   harus langsung berubah warna tanpa perlu restart aplikasi.
@@ -422,6 +425,8 @@ di ZIP ini, jadi tidak perlu setup tambahan.
 - [x] `PembayaranCalculatorTest` — kembalian & validasi cukup/kurang bayar
 - [x] `CurrencyFormatterTest` — format Rupiah dengan pemisah ribuan
 - [x] `PasswordHasherTest` — password tidak pernah plain text
+- [x] `UserRepositoryTest` — seed akun pertama hanya saat kosong, password bawaan ditolak sebagai password baru
+- [x] `LicenseKeyValidatorTest`, `PerangkatIdTest`, `WaktuLisensiTest` — lisensi terikat perangkat & pelindung jam
 
 ## Checklist Pengujian Manual di HP (sesuai poin 30 brief)
 
