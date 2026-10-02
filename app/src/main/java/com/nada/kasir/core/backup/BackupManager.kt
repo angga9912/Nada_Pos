@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.text.SimpleDateFormat
@@ -78,7 +79,14 @@ class BackupManager @Inject constructor(
         return relatif
     }
 
-    suspend fun backup(): Result<File> = withContext(Dispatchers.IO) {
+    /**
+     * Membuat file backup TERENKRIPSI dengan [password] (F-08). Isi zip ditulis langsung lewat stream
+     * enkripsi, jadi versi polosnya tidak pernah tersimpan di disk. Password tidak disimpan di mana pun:
+     * kalau hilang, backup tidak bisa dibuka lagi oleh siapa pun.
+     */
+    suspend fun backup(password: String): Result<File> = withContext(Dispatchers.IO) {
+        BackupEncryption.pesanPasswordTidakValid(password)
+            ?.let { return@withContext Result.Failure(AppError.Lainnya(it)) }
         try {
             val stores = storeDao.getAllForBackup()
             val products = productDao.getAllForBackup()
@@ -106,9 +114,12 @@ class BackupManager @Inject constructor(
             products.forEach { keRelatif(it.fotoPath)?.let { rel -> relatifFotoDipakai += rel } }
             stores.forEach { keRelatif(it.logoPath)?.let { rel -> relatifFotoDipakai += rel } }
 
-            val namaFile = "nada-kasir-backup-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale("id","ID")).format(Date())}.zip"
+            val namaFile = "nada-kasir-backup-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale("id","ID")).format(Date())}.${BackupEncryption.EKSTENSI}"
             val file = File(folderBackup(), namaFile)
-            ZipOutputStream(file.outputStream()).use { zip ->
+            val sandi = password.toCharArray()
+            try {
+              file.outputStream().use { fos ->
+              ZipOutputStream(BackupEncryption.bungkusTulis(fos, sandi)).use { zip ->
                 zip.putNextEntry(ZipEntry(ENTRI_JSON))
                 zip.write(root.toString(2).toByteArray())
                 zip.closeEntry()
@@ -124,6 +135,13 @@ class BackupManager @Inject constructor(
                     // produk/toko tetap ikut backup seperti biasa - cuma fotonya yang dilewati,
                     // bukan menggagalkan seluruh proses backup.
                 }
+              }
+              }
+            } catch (e: Exception) {
+                file.delete() // jangan tinggalkan file backup setengah jadi
+                throw e
+            } finally {
+                sandi.fill('\u0000')
             }
             Result.Success(file)
         } catch (e: Exception) {
@@ -131,15 +149,71 @@ class BackupManager @Inject constructor(
         }
     }
 
-    /** Restore dari file .zip hasil [backup]. [zipUri] didapat dari file picker sistem (SAF). */
-    suspend fun restore(zipUri: Uri): Result<Unit> = withContext(Dispatchers.IO) {
+    /**
+     * Menentukan jenis file yang dipilih pengguna (terenkripsi / zip lama / bukan backup) hanya dari
+     * beberapa byte awalnya, supaya layar bisa meminta password HANYA bila memang diperlukan.
+     */
+    suspend fun jenisBackup(uri: Uri): JenisBackup = withContext(Dispatchers.IO) {
+        try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                val awal = ByteArray(BackupEncryption.PANJANG_PENGENAL)
+                var terbaca = 0
+                while (terbaca < awal.size) {
+                    val n = input.read(awal, terbaca, awal.size - terbaca)
+                    if (n < 0) break
+                    terbaca += n
+                }
+                BackupEncryption.jenis(awal.copyOf(terbaca))
+            } ?: JenisBackup.TIDAK_DIKENAL
+        } catch (e: Exception) {
+            JenisBackup.TIDAK_DIKENAL
+        }
+    }
+
+    /**
+     * Restore dari file hasil [backup]. [zipUri] didapat dari file picker sistem (SAF).
+     * [password] wajib untuk backup terenkripsi; backup .zip lama (sebelum enkripsi) tetap bisa
+     * dipulihkan tanpa password.
+     */
+    suspend fun restore(zipUri: Uri, password: String? = null): Result<Unit> = withContext(Dispatchers.IO) {
         // Tahap 1: baca SELURUH entri zip ke memori dulu (JSON + semua foto), validasi JSON-nya,
         // SEBELUM menyentuh disk (folder foto) atau data lama sama sekali - fail fast kalau rusak.
         val entriFoto = mutableMapOf<String, ByteArray>()
         var jsonText: String? = null
+
+        // Tahap 0: baca file mentah; kalau terenkripsi, buka dulu dengan password. Semuanya terjadi
+        // SEBELUM data lama disentuh, jadi password salah atau file rusak tidak mengubah apa pun.
+        val zipBytes: ByteArray
         try {
-            val input = context.contentResolver.openInputStream(zipUri) ?: return@withContext Result.Failure(AppError.FormatExcelSalah)
-            ZipInputStream(input).use { zip ->
+            val mentah = context.contentResolver.openInputStream(zipUri)?.use { it.readBytes() }
+                ?: return@withContext Result.Failure(AppError.FormatExcelSalah)
+            zipBytes = when (BackupEncryption.jenis(mentah)) {
+                JenisBackup.TERENKRIPSI -> {
+                    if (password.isNullOrEmpty()) {
+                        return@withContext Result.Failure(AppError.PasswordBackupDiperlukan)
+                    }
+                    val sandi = password.toCharArray()
+                    try {
+                        when (val hasil = BackupEncryption.dekripsi(mentah, sandi)) {
+                            is HasilDekripsi.Berhasil -> hasil.data
+                            HasilDekripsi.PasswordSalahAtauRusak ->
+                                return@withContext Result.Failure(AppError.PasswordBackupSalah)
+                            HasilDekripsi.FormatTidakDikenal ->
+                                return@withContext Result.Failure(AppError.FormatExcelSalah)
+                        }
+                    } finally {
+                        sandi.fill('\u0000')
+                    }
+                }
+                JenisBackup.ZIP_LAMA -> mentah
+                JenisBackup.TIDAK_DIKENAL -> return@withContext Result.Failure(AppError.FormatExcelSalah)
+            }
+        } catch (e: Exception) {
+            return@withContext Result.Failure(AppError.FormatExcelSalah)
+        }
+
+        try {
+            ZipInputStream(ByteArrayInputStream(zipBytes)).use { zip ->
                 var entry = zip.nextEntry
                 while (entry != null) {
                     val bytes = ByteArrayOutputStream().apply { zip.copyTo(this) }.toByteArray()

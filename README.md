@@ -298,8 +298,16 @@ Sudah ditambahkan di atas Phase 1 & 2:
   setiap baris (kode/nama wajib, harga & stok harus angka), barcode duplikat
   otomatis DILEWATI (bukan menimpa), semua baris valid disimpan dalam satu
   DB transaction. Pesan error tetap berbahasa manusia ("File Excel tidak sesuai format.")
-- ✅ **Backup Data** — `BackupManager` mengekspor seluruh data penting (Produk, Stok,
-  Transaksi, Pengaturan Toko, Pengguna, Printer) ke satu file `.json`, bisa dibagikan.
+- ✅ **Backup Data (terenkripsi)** — `BackupManager` mengekspor seluruh data penting (Produk, Stok,
+  Transaksi, Pengaturan Toko, Pengguna, Printer, foto) ke satu file `.nadabak`, bisa dibagikan.
+  File **dienkripsi dengan password pilihan pemilik toko** (minimal 8 karakter): AES-256-GCM, kunci
+  diturunkan dengan PBKDF2-HMAC-SHA256 (150.000 iterasi, salt dan IV acak per file), sehingga isi
+  (omzet, transaksi, hash password akun) tidak terbaca oleh siapa pun yang memegang filenya, dan
+  perubahan sekecil apa pun pada file terdeteksi. Isi zip ditulis langsung lewat stream enkripsi,
+  jadi versi polosnya tidak pernah tersimpan di disk. **Password tidak disimpan di mana pun: jika
+  hilang, backup tidak bisa dipulihkan oleh siapa pun** - ingatkan pelanggan untuk mencatatnya.
+  Backup `.zip` lama (sebelum fitur ini) tetap bisa direstore tanpa password; file lama yang masih
+  tersimpan di folder backup/Drive tidak ikut terenkripsi dan sebaiknya dihapus setelah diganti.
 - ✅ **Simpan Backup ke Google Drive** — tombol "Simpan ke Google Drive" di layar
   Backup & Restore membuka file picker sistem Android (Storage Access Framework);
   Google Drive otomatis muncul sebagai salah satu lokasi kalau aplikasi Drive
@@ -425,6 +433,7 @@ di ZIP ini, jadi tidak perlu setup tambahan.
 - [x] `PembayaranCalculatorTest` — kembalian & validasi cukup/kurang bayar
 - [x] `CurrencyFormatterTest` — format Rupiah dengan pemisah ribuan
 - [x] `PasswordHasherTest` — password tidak pernah plain text
+- [x] `BackupEncryptionTest` — round-trip, password salah, file diubah/terpotong, header berbahaya, zip lewat stream
 - [x] `MutasiStokManualTest` — perubahan stok manual selalu tercatat (jumlah mutasi = stok akhir)
 - [x] `PemetaanReferensiMutasiTest` — restore memetakan referensi transaksi pada mutasi stok ke id baru
 - [x] `UserRepositoryTest` — seed akun pertama hanya saat kosong, password bawaan ditolak sebagai password baru
