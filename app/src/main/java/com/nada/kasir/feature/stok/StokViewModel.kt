@@ -20,9 +20,9 @@ class StokViewModel @Inject constructor(
     val riwayatMutasi: StateFlow<List<StockMovementEntity>> = stockRepository.observeRiwayat()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun stokMasuk(productId: Long, qty: Int, hargaBeli: Double?, supplier: String?, keterangan: String?, onError: (String) -> Unit) {
+    fun stokMasuk(productId: Long, qty: Int, hargaBeli: Double?, supplierId: Long?, keterangan: String?, onError: (String) -> Unit) {
         viewModelScope.launch {
-            when (val r = stockRepository.stokMasuk(productId, qty, hargaBeli, supplier, keterangan)) {
+            when (val r = stockRepository.stokMasuk(productId, qty, hargaBeli, supplierId, keterangan)) {
                 is Result.Failure -> onError(r.error.pesan)
                 is Result.Success -> Unit
             }

@@ -20,7 +20,8 @@ class NomorAntrianGenerator @Inject constructor(
         }
         val startHariIni = cal.timeInMillis
         val endHariIni = startHariIni + 24 * 60 * 60 * 1000L
+        val maxAntrian = transactionDao.getMaxNomorAntrianHariIni(startHariIni, endHariIni)
         val jumlahHariIni = transactionDao.countSemuaTransaksiHariIni(startHariIni, endHariIni)
-        return jumlahHariIni + 1
+        return maxOf(maxAntrian, jumlahHariIni) + 1
     }
 }

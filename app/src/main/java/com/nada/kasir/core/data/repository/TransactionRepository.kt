@@ -2,7 +2,9 @@ package com.nada.kasir.core.data.repository
 
 import androidx.room.withTransaction
 import com.nada.kasir.core.data.local.AppDatabase
+import com.nada.kasir.core.data.local.dao.AuditLogDao
 import com.nada.kasir.core.data.local.dao.ProductDao
+import com.nada.kasir.core.data.local.dao.StockMovementDao
 import com.nada.kasir.core.data.local.dao.TransactionDao
 import com.nada.kasir.core.data.local.entity.*
 import com.nada.kasir.core.domain.logic.PembayaranCalculator
@@ -20,6 +22,8 @@ class TransactionRepository @Inject constructor(
     private val appDatabase: AppDatabase,
     private val transactionDao: TransactionDao,
     private val productDao: ProductDao,
+    private val stockMovementDao: StockMovementDao,
+    private val auditLogDao: AuditLogDao,
     private val nomorTransaksiGenerator: NomorTransaksiGenerator,
     private val nomorAntrianGenerator: NomorAntrianGenerator
 ) {
@@ -40,7 +44,13 @@ class TransactionRepository @Inject constructor(
         namaPembeli: String? = null,
         catatanMetode: String? = null
     ): Result<Long> {
+        if (items.isEmpty() || items.any { it.qty <= 0 }) {
+            return Result.Failure(AppError.Lainnya("Keranjang kosong atau jumlah barang tidak valid."))
+        }
         val subtotal = items.sumOf { it.harga * it.qty }
+        if (!PembayaranCalculator.diskonValid(diskonTotal, subtotal)) {
+            return Result.Failure(AppError.Lainnya("Diskon tidak boleh negatif atau melebihi subtotal belanja."))
+        }
         val total = subtotal - diskonTotal
 
         if (metode == MetodePembayaran.TUNAI && !PembayaranCalculator.cukup(jumlahDiterima, total)) {
@@ -55,6 +65,8 @@ class TransactionRepository @Inject constructor(
             }
         }
 
+        val sekarang = System.currentTimeMillis()
+
         return try {
             val transactionId = appDatabase.withTransaction {
                 val noTransaksi = nomorTransaksiGenerator.generate()
@@ -65,7 +77,7 @@ class TransactionRepository @Inject constructor(
                         noTransaksi = noTransaksi,
                         nomorAntrian = nomorAntrian,
                         namaPembeli = namaPembeli?.trim()?.ifBlank { null },
-                        tanggalWaktu = System.currentTimeMillis(),
+                        tanggalWaktu = sekarang,
                         userId = userId,
                         subtotal = subtotal,
                         diskon = diskonTotal,
@@ -98,9 +110,19 @@ class TransactionRepository @Inject constructor(
                     )
                 )
 
-                // Kurangi stok + catat mutasi untuk tiap item
+                // Kurangi stok + catat mutasi keluar untuk tiap item
                 items.forEach { item ->
                     productDao.decreaseStock(item.productId, item.qty)
+                    stockMovementDao.insert(
+                        StockMovementEntity(
+                            productId = item.productId,
+                            tipe = TipeMutasiStok.KELUAR,
+                            qty = item.qty,
+                            referensiTransaksiId = trxId,
+                            tanggalWaktu = sekarang,
+                            keterangan = "Penjualan Kasir No: $noTransaksi"
+                        )
+                    )
                 }
 
                 trxId
@@ -120,13 +142,39 @@ class TransactionRepository @Inject constructor(
     suspend fun batalkanTransaksi(transactionId: Long): Result<Unit> {
         return try {
             appDatabase.withTransaction {
+                val trx = transactionDao.findById(transactionId)
+                    ?: return@withTransaction Result.Failure(AppError.Lainnya("Transaksi tidak ditemukan."))
+
+                if (trx.status == TransactionStatus.CANCELLED) {
+                    return@withTransaction Result.Failure(AppError.Lainnya("Transaksi ini sudah dibatalkan sebelumnya."))
+                }
+
                 val items = transactionDao.getItems(transactionId)
+                val waktuBatal = System.currentTimeMillis()
                 items.forEach { item ->
                     productDao.increaseStock(item.productId, item.qty)
+                    stockMovementDao.insert(
+                        StockMovementEntity(
+                            productId = item.productId,
+                            tipe = TipeMutasiStok.MASUK,
+                            qty = item.qty,
+                            referensiTransaksiId = transactionId,
+                            tanggalWaktu = waktuBatal,
+                            keterangan = "Pembatalan Transaksi ${trx.noTransaksi}"
+                        )
+                    )
                 }
                 transactionDao.updateStatus(transactionId, TransactionStatus.CANCELLED)
+                auditLogDao.insert(
+                    AuditLogEntity(
+                        userId = trx.userId,
+                        aksi = "BATAL_TRANSAKSI",
+                        detail = "Pembatalan transaksi ${trx.noTransaksi} senilai ${trx.total}",
+                        tanggalWaktu = waktuBatal
+                    )
+                )
+                Result.Success(Unit)
             }
-            Result.Success(Unit)
         } catch (e: Exception) {
             Result.Failure(AppError.TransaksiGagalDisimpan)
         }

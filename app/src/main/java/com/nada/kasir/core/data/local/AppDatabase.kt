@@ -22,10 +22,15 @@ import com.nada.kasir.core.data.local.entity.*
         StockMovementEntity::class,
         PrinterEntity::class,
         SettingEntity::class,
-        AuditLogEntity::class
+        AuditLogEntity::class,
+        OutletEntity::class,
+        SupplierEntity::class,
+        HutangPiutangEntity::class,
+        PurchaseEntity::class,
+        PurchaseItemEntity::class
     ],
-    version = 3, // v3: tambah PaymentEntity.catatanMetode (metode "Lainnya" manual) - lihat MIGRATION_2_3
-    exportSchema = false // aktifkan + set room.schemaLocation kalau nanti butuh migration history formal
+    version = 5,
+    exportSchema = false
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -37,6 +42,11 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun stockMovementDao(): StockMovementDao
     abstract fun settingDao(): SettingDao
     abstract fun printerDao(): PrinterDao
+    abstract fun auditLogDao(): AuditLogDao
+    abstract fun outletDao(): OutletDao
+    abstract fun supplierDao(): SupplierDao
+    abstract fun hutangPiutangDao(): HutangPiutangDao
+    abstract fun purchaseDao(): PurchaseDao
 
     companion object {
         const val DB_NAME = "nada_kasir.db"

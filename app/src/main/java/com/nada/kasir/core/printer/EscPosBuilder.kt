@@ -78,9 +78,11 @@ class EscPosBuilder {
         return this
     }
 
-    fun feedAndCut(): EscPosBuilder {
+    fun feedAndCut(withCut: Boolean = true): EscPosBuilder {
         newLine(); newLine(); newLine()
-        buffer.write(GS); buffer.write(0x56); buffer.write(0x00) // GS V 0 - full cut
+        if (withCut) {
+            buffer.write(GS); buffer.write(0x56); buffer.write(0x00) // GS V 0 - full cut
+        }
         return this
     }
 

@@ -1,33 +1,46 @@
 package com.nada.kasir.core.backup
 
 import android.content.Context
+import android.net.Uri
 import androidx.room.withTransaction
 import com.nada.kasir.core.data.local.AppDatabase
 import com.nada.kasir.core.data.local.dao.*
+import com.nada.kasir.core.data.local.entity.SettingEntity
+import com.nada.kasir.core.lisensi.KunciPengaturanLisensi
 import com.nada.kasir.core.util.AppError
 import com.nada.kasir.core.util.Result
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val BACKUP_VERSION = 1
+private const val ENTRI_JSON = "backup.json"
 
 /**
  * BACKUP DATA / RESTORE DATA (poin 17).
- * Mencakup: Produk, Stok, Transaksi, Pengaturan Toko, Pengguna, Printer.
+ * Mencakup: Produk, Stok, Transaksi, Pengaturan Toko, Pengguna, Printer, DAN foto produk
+ * + logo toko (sebelumnya cuma path-nya yang tersimpan di JSON, file fotonya sendiri
+ * tertinggal di penyimpanan internal HP lama - jadi hilang setelah pindah HP/instal ulang.
+ * Sekarang file backup berupa .zip: "backup.json" + file foto asli, bukan .json polos).
  *
  * Aturan penting: restore TIDAK BOLEH menghapus data lama sebelum data baru
  * terbukti valid dan berhasil disisipkan. Caranya di sini:
- *   1. Parse & validasi seluruh JSON dulu di luar transaksi DB (fail fast kalau rusak).
- *   2. Baru setelah semua data baru siap di memori, hapus tabel lama DAN insert data
- *      baru dibungkus SATU appDatabase.withTransaction { } - kalau ada error di
- *      tengah jalan, Room otomatis rollback dan data lama tetap utuh.
+ *   1. Baca & validasi SELURUH isi zip (JSON + semua file foto) ke memori dulu,
+ *      di luar transaksi DB (fail fast kalau rusak, belum ada yang ditulis ke disk/DB).
+ *   2. Baru setelah semua data baru terbukti valid, foto ditulis ke disk DAN tabel lama
+ *      dihapus + data baru di-insert, dibungkus SATU appDatabase.withTransaction { } -
+ *      kalau ada error di tengah jalan, Room otomatis rollback dan data lama tetap utuh.
  */
 @Singleton
 class BackupManager @Inject constructor(
@@ -48,71 +61,277 @@ class BackupManager @Inject constructor(
         return dir
     }
 
-    suspend fun backup(): Result<File> = withContext(Dispatchers.IO) {
+    /**
+     * Path foto (fotoPath/logoPath) tersimpan sebagai path ABSOLUT (mis.
+     * "/data/user/0/com.nada.kasir/files/produk_foto/foto_x.png"), sedangkan di dalam zip
+     * disimpan sebagai path RELATIF terhadap filesDir ("produk_foto/foto_x.png") - supaya
+     * tetap benar walau di-restore ke HP lain dengan absolute path yang beda persis.
+     * null kalau path-nya di luar filesDir (dianggap tidak valid/tidak dikenal, dilewati).
+     */
+    private fun keRelatif(absolutePath: String?): String? {
+        if (absolutePath.isNullOrBlank()) return null
+        val basis = context.filesDir.absolutePath
+        if (!absolutePath.startsWith(basis)) return null
+        val relatif = absolutePath.removePrefix(basis).trimStart('/')
+        // Tolak path kosong dan path yang mencoba keluar folder (mis. "../databases/x") - path ini
+        // bisa berasal dari file backup yang tidak tepercaya.
+        if (relatif.isBlank() || relatif.split('/').any { it == ".." || it == "." }) return null
+        return relatif
+    }
+
+    /**
+     * Membuat file backup TERENKRIPSI dengan [password] (F-08). Isi zip ditulis langsung lewat stream
+     * enkripsi, jadi versi polosnya tidak pernah tersimpan di disk. Password tidak disimpan di mana pun:
+     * kalau hilang, backup tidak bisa dibuka lagi oleh siapa pun.
+     */
+    suspend fun backup(password: String): Result<File> = withContext(Dispatchers.IO) {
+        BackupEncryption.pesanPasswordTidakValid(password)
+            ?.let { return@withContext Result.Failure(AppError.Lainnya(it)) }
         try {
+            val stores = storeDao.getAllForBackup()
+            val products = productDao.getAllForBackup()
+
             val root = JSONObject()
             root.put("versiBackup", BACKUP_VERSION)
             root.put("dibuatPada", System.currentTimeMillis())
-            root.put("stores", EntityJsonMapper.listToJsonArray(storeDao.getAllForBackup(), EntityJsonMapper::storeToJson))
+            root.put("stores", EntityJsonMapper.listToJsonArray(stores, EntityJsonMapper::storeToJson))
             root.put("users", EntityJsonMapper.listToJsonArray(userDao.getAllForBackup(), EntityJsonMapper::userToJson))
             root.put("categories", EntityJsonMapper.listToJsonArray(categoryDao.getAllForBackup(), EntityJsonMapper::categoryToJson))
-            root.put("products", EntityJsonMapper.listToJsonArray(productDao.getAllForBackup(), EntityJsonMapper::productToJson))
+            root.put("products", EntityJsonMapper.listToJsonArray(products, EntityJsonMapper::productToJson))
             root.put("transactions", EntityJsonMapper.listToJsonArray(transactionDao.getAllTransactionsForBackup(), EntityJsonMapper::transactionToJson))
             root.put("transactionItems", EntityJsonMapper.listToJsonArray(transactionDao.getAllItemsForBackup(), EntityJsonMapper::itemToJson))
             root.put("payments", EntityJsonMapper.listToJsonArray(transactionDao.getAllPaymentsForBackup(), EntityJsonMapper::paymentToJson))
             root.put("stockMovements", EntityJsonMapper.listToJsonArray(stockMovementDao.getAllForBackup(), EntityJsonMapper::stockMovementToJson))
             root.put("printers", EntityJsonMapper.listToJsonArray(printerDao.getAllForBackup(), EntityJsonMapper::printerToJson))
-            root.put("settings", EntityJsonMapper.listToJsonArray(settingDao.getAllForBackup(), EntityJsonMapper::settingToJson))
+            root.put("settings", EntityJsonMapper.listToJsonArray(
+                settingDao.getAllForBackup().filter { it.key !in KunciPengaturanLisensi.SEMUA },
+                EntityJsonMapper::settingToJson
+            ))
 
-            val namaFile = "nada-kasir-backup-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale("id","ID")).format(Date())}.json"
+            // Kumpulkan path relatif semua foto yang benar-benar ada (produk + logo toko),
+            // pakai Set supaya tidak dobel kalau ada path yang sama kebetulan dipakai 2 baris.
+            val relatifFotoDipakai = linkedSetOf<String>()
+            products.forEach { keRelatif(it.fotoPath)?.let { rel -> relatifFotoDipakai += rel } }
+            stores.forEach { keRelatif(it.logoPath)?.let { rel -> relatifFotoDipakai += rel } }
+
+            val namaFile = "nada-kasir-backup-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale("id","ID")).format(Date())}.${BackupEncryption.EKSTENSI}"
             val file = File(folderBackup(), namaFile)
-            file.writeText(root.toString(2))
+            val sandi = password.toCharArray()
+            try {
+              file.outputStream().use { fos ->
+              ZipOutputStream(BackupEncryption.bungkusTulis(fos, sandi)).use { zip ->
+                zip.putNextEntry(ZipEntry(ENTRI_JSON))
+                zip.write(root.toString(2).toByteArray())
+                zip.closeEntry()
+
+                relatifFotoDipakai.forEach { relatif ->
+                    val fotoFile = File(context.filesDir, relatif)
+                    if (fotoFile.exists()) {
+                        zip.putNextEntry(ZipEntry(relatif))
+                        fotoFile.inputStream().use { it.copyTo(zip) }
+                        zip.closeEntry()
+                    }
+                    // Kalau file fotonya sudah tidak ada di disk (misal terhapus manual), data
+                    // produk/toko tetap ikut backup seperti biasa - cuma fotonya yang dilewati,
+                    // bukan menggagalkan seluruh proses backup.
+                }
+              }
+              }
+            } catch (e: Exception) {
+                file.delete() // jangan tinggalkan file backup setengah jadi
+                throw e
+            } finally {
+                sandi.fill('\u0000')
+            }
             Result.Success(file)
         } catch (e: Exception) {
             Result.Failure(AppError.TransaksiGagalDisimpan)
         }
     }
 
-    suspend fun restore(jsonText: String): Result<Unit> = withContext(Dispatchers.IO) {
-        // Tahap 1: parse & validasi PENUH di luar transaksi DB, sebelum menyentuh data lama sama sekali.
+    /**
+     * Menentukan jenis file yang dipilih pengguna (terenkripsi / zip lama / bukan backup) hanya dari
+     * beberapa byte awalnya, supaya layar bisa meminta password HANYA bila memang diperlukan.
+     */
+    suspend fun jenisBackup(uri: Uri): JenisBackup = withContext(Dispatchers.IO) {
+        try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                val awal = ByteArray(BackupEncryption.PANJANG_PENGENAL)
+                var terbaca = 0
+                while (terbaca < awal.size) {
+                    val n = input.read(awal, terbaca, awal.size - terbaca)
+                    if (n < 0) break
+                    terbaca += n
+                }
+                BackupEncryption.jenis(awal.copyOf(terbaca))
+            } ?: JenisBackup.TIDAK_DIKENAL
+        } catch (e: Exception) {
+            JenisBackup.TIDAK_DIKENAL
+        }
+    }
+
+    /**
+     * Restore dari file hasil [backup]. [zipUri] didapat dari file picker sistem (SAF).
+     * [password] wajib untuk backup terenkripsi; backup .zip lama (sebelum enkripsi) tetap bisa
+     * dipulihkan tanpa password.
+     */
+    suspend fun restore(zipUri: Uri, password: String? = null): Result<Unit> = withContext(Dispatchers.IO) {
+        // Tahap 1: baca SELURUH entri zip ke memori dulu (JSON + semua foto), validasi JSON-nya,
+        // SEBELUM menyentuh disk (folder foto) atau data lama sama sekali - fail fast kalau rusak.
+        val entriFoto = mutableMapOf<String, ByteArray>()
+        var jsonText: String? = null
+
+        // Tahap 0: baca file mentah; kalau terenkripsi, buka dulu dengan password. Semuanya terjadi
+        // SEBELUM data lama disentuh, jadi password salah atau file rusak tidak mengubah apa pun.
+        val zipBytes: ByteArray
+        try {
+            val mentah = context.contentResolver.openInputStream(zipUri)?.use { it.readBytes() }
+                ?: return@withContext Result.Failure(AppError.FormatExcelSalah)
+            zipBytes = when (BackupEncryption.jenis(mentah)) {
+                JenisBackup.TERENKRIPSI -> {
+                    if (password.isNullOrEmpty()) {
+                        return@withContext Result.Failure(AppError.PasswordBackupDiperlukan)
+                    }
+                    val sandi = password.toCharArray()
+                    try {
+                        when (val hasil = BackupEncryption.dekripsi(mentah, sandi)) {
+                            is HasilDekripsi.Berhasil -> hasil.data
+                            HasilDekripsi.PasswordSalahAtauRusak ->
+                                return@withContext Result.Failure(AppError.PasswordBackupSalah)
+                            HasilDekripsi.FormatTidakDikenal ->
+                                return@withContext Result.Failure(AppError.FormatExcelSalah)
+                        }
+                    } finally {
+                        sandi.fill('\u0000')
+                    }
+                }
+                JenisBackup.ZIP_LAMA -> mentah
+                JenisBackup.TIDAK_DIKENAL -> return@withContext Result.Failure(AppError.FormatExcelSalah)
+            }
+        } catch (e: Exception) {
+            return@withContext Result.Failure(AppError.FormatExcelSalah)
+        }
+
+        try {
+            ZipInputStream(ByteArrayInputStream(zipBytes)).use { zip ->
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    val bytes = ByteArrayOutputStream().apply { zip.copyTo(this) }.toByteArray()
+                    if (entry.name == ENTRI_JSON) jsonText = String(bytes) else entriFoto[entry.name] = bytes
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
+            }
+        } catch (e: Exception) {
+            return@withContext Result.Failure(AppError.FormatExcelSalah)
+        }
+
         val root: JSONObject
         try {
-            root = JSONObject(jsonText)
+            root = JSONObject(jsonText ?: throw JSONException("file backup.json tidak ditemukan di dalam zip"))
             if (!root.has("versiBackup")) throw JSONException("format tidak dikenali")
         } catch (e: JSONException) {
             return@withContext Result.Failure(AppError.FormatExcelSalah)
         }
 
-        val stores = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("stores"), EntityJsonMapper::storeFromJson) } catch (e: Exception) { emptyList() }
-        val users = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("users"), EntityJsonMapper::userFromJson) } catch (e: Exception) { emptyList() }
-        val categories = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("categories"), EntityJsonMapper::categoryFromJson) } catch (e: Exception) { emptyList() }
-        val products = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("products"), EntityJsonMapper::productFromJson) } catch (e: Exception) { emptyList() }
-        val printers = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("printers"), EntityJsonMapper::printerFromJson) } catch (e: Exception) { emptyList() }
-        val settings = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("settings"), EntityJsonMapper::settingFromJson) } catch (e: Exception) { emptyList() }
-        val stockMovements = try { EntityJsonMapper.jsonArrayToList(root.getJSONArray("stockMovements"), EntityJsonMapper::stockMovementFromJson) } catch (e: Exception) { emptyList() }
+        // Parsing KETAT: kalau ada satu bagian saja yang hilang/cacat, seluruh restore dibatalkan
+        // SEBELUM data lama disentuh. (Sebelumnya bagian yang gagal diparse diam-diam dianggap
+        // daftar kosong, lalu semua tabel tetap dihapus -> data hilang.)
+        val stores: List<com.nada.kasir.core.data.local.entity.StoreEntity>
+        val users: List<com.nada.kasir.core.data.local.entity.UserEntity>
+        val categories: List<com.nada.kasir.core.data.local.entity.CategoryEntity>
+        val products: List<com.nada.kasir.core.data.local.entity.ProductEntity>
+        val printers: List<com.nada.kasir.core.data.local.entity.PrinterEntity>
+        val settings: List<com.nada.kasir.core.data.local.entity.SettingEntity>
+        val stockMovements: List<com.nada.kasir.core.data.local.entity.StockMovementEntity>
+        val transaksiJsonArray: org.json.JSONArray
+        val itemJsonArray: org.json.JSONArray
+        val paymentJsonArray: org.json.JSONArray
+        try {
+            stores = EntityJsonMapper.jsonArrayToList(root.getJSONArray("stores"), EntityJsonMapper::storeFromJson)
+            users = EntityJsonMapper.jsonArrayToList(root.getJSONArray("users"), EntityJsonMapper::userFromJson)
+            categories = EntityJsonMapper.jsonArrayToList(root.getJSONArray("categories"), EntityJsonMapper::categoryFromJson)
+            products = EntityJsonMapper.jsonArrayToList(root.getJSONArray("products"), EntityJsonMapper::productFromJson)
+            printers = EntityJsonMapper.jsonArrayToList(root.getJSONArray("printers"), EntityJsonMapper::printerFromJson)
+            settings = EntityJsonMapper.jsonArrayToList(root.getJSONArray("settings"), EntityJsonMapper::settingFromJson)
+            stockMovements = EntityJsonMapper.jsonArrayToList(root.getJSONArray("stockMovements"), EntityJsonMapper::stockMovementFromJson)
 
-        // Transaksi butuh pemetaan ID lama -> ID baru supaya item & payment tetap terhubung ke induknya
-        val transaksiJsonArray = try { root.getJSONArray("transactions") } catch (e: Exception) { null }
-        val itemJsonArray = try { root.getJSONArray("transactionItems") } catch (e: Exception) { null }
-        val paymentJsonArray = try { root.getJSONArray("payments") } catch (e: Exception) { null }
+            // Transaksi butuh pemetaan ID lama -> ID baru supaya item & payment tetap terhubung ke induknya.
+            // Ketiganya juga divalidasi penuh di sini (bukan baru di dalam transaksi DB).
+            transaksiJsonArray = root.getJSONArray("transactions")
+            itemJsonArray = root.getJSONArray("transactionItems")
+            paymentJsonArray = root.getJSONArray("payments")
+            for (i in 0 until transaksiJsonArray.length()) {
+                val o = transaksiJsonArray.getJSONObject(i)
+                EntityJsonMapper.transactionOldId(o); EntityJsonMapper.transactionFromJson(o)
+            }
+            for (i in 0 until itemJsonArray.length()) {
+                val o = itemJsonArray.getJSONObject(i)
+                EntityJsonMapper.itemOldTransactionId(o); EntityJsonMapper.itemFromJson(o, 0L)
+            }
+            for (i in 0 until paymentJsonArray.length()) {
+                val o = paymentJsonArray.getJSONObject(i)
+                EntityJsonMapper.paymentOldTransactionId(o); EntityJsonMapper.paymentFromJson(o, 0L)
+            }
+        } catch (e: Exception) {
+            return@withContext Result.Failure(AppError.FormatExcelSalah)
+        }
+
+        // Aplikasi selalu punya minimal 1 akun (admin awal dibuat otomatis). Backup tanpa pengguna
+        // dianggap tidak valid - kalau dipulihkan, tidak akan ada akun yang bisa dipakai login.
+        if (users.isEmpty()) return@withContext Result.Failure(AppError.FormatExcelSalah)
+
+        // Tulis kembali file foto (produk & logo toko) ke filesDir SEBELUM transaksi DB, dengan
+        // path relatif yang sama seperti waktu backup - supaya fotoPath/logoPath yang ada di JSON
+        // (path absolut, ikut dibawa apa adanya oleh productFromJson/storeFromJson) tetap valid
+        // walau backup ini dipulihkan di HP lain dengan absolute path filesDir yang berbeda,
+        // karena SEBENARNYA path yang dipakai untuk MEMBACA foto nanti (mis. Coil AsyncImage)
+        // adalah string fotoPath apa adanya - jadi kalau HP tujuan beda user/absolute path,
+        // fotoPath lama tidak otomatis cocok. Untuk itu path di JSON ditimpa ke absolute path
+        // filesDir HP SAAT INI dulu, baru fotonya ditulis ke lokasi itu.
+        fun tulisFotoDanPetakanUlang(pathLama: String?): String? {
+            // Path yang mengandung ".." berasal dari backup tidak tepercaya -> dibuang, bukan dipakai.
+            if (pathLama != null && pathLama.split('/').any { it == ".." }) return null
+            val relatif = keRelatif(pathLama) ?: return pathLama
+            val bytes = entriFoto[relatif] ?: return pathLama
+            return try {
+                val tujuan = File(context.filesDir, relatif)
+                // Lapis kedua: pastikan hasil akhirnya benar-benar berada di dalam filesDir.
+                val basisKanonik = context.filesDir.canonicalPath + File.separator
+                if (!tujuan.canonicalPath.startsWith(basisKanonik)) return null
+                tujuan.parentFile?.mkdirs()
+                tujuan.writeBytes(bytes)
+                tujuan.absolutePath
+            } catch (e: Exception) {
+                pathLama
+            }
+        }
+        val storesSiap = stores.map { it.copy(logoPath = tulisFotoDanPetakanUlang(it.logoPath)) }
+        val productsSiap = products.map { it.copy(fotoPath = tulisFotoDanPetakanUlang(it.fotoPath)) }
 
         return@withContext try {
             appDatabase.withTransaction {
                 // Tahap 2: baru sekarang data lama dihapus - kalau exception terjadi di titik manapun
                 // setelah ini, Room me-rollback SEMUANYA (termasuk DELETE-nya), jadi data lama tetap ada.
+                // Status lisensi adalah milik PERANGKAT ini, bukan bagian dari data toko: simpan dulu
+                // sebelum tabel settings dikosongkan, lalu tulis kembali. Nilai lisensi yang kebetulan
+                // ada di file backup (backup versi lama) diabaikan, supaya file backup tidak bisa
+                // menyisipkan paket berbayar atau memundurkan penanda waktu anti-manipulasi jam.
+                val lisensiSaatIni = KunciPengaturanLisensi.SEMUA.mapNotNull { kunci ->
+                    settingDao.get(kunci)?.let { SettingEntity(kunci, it) }
+                }
                 storeDao.clearAll(); userDao.clearAll(); categoryDao.clearAll(); productDao.clearAll()
                 printerDao.clearAll(); settingDao.clearAll(); stockMovementDao.clearAll()
                 transactionDao.clearPayments(); transactionDao.clearItems(); transactionDao.clearTransactions()
 
-                if (stores.isNotEmpty()) storeDao.insertAll(stores)
+                if (storesSiap.isNotEmpty()) storeDao.insertAll(storesSiap)
                 if (users.isNotEmpty()) userDao.insertAll(users)
                 if (categories.isNotEmpty()) categoryDao.insertAll(categories)
-                if (products.isNotEmpty()) productDao.insertAll(products)
+                if (productsSiap.isNotEmpty()) productDao.insertAll(productsSiap)
                 if (printers.isNotEmpty()) printerDao.insertAll(printers)
-                settings.forEach { settingDao.upsert(it) }
-                if (stockMovements.isNotEmpty()) stockMovementDao.insertAll(stockMovements)
-
-                if (transaksiJsonArray != null) {
+                settings.filter { it.key !in KunciPengaturanLisensi.SEMUA }.forEach { settingDao.upsert(it) }
+                lisensiSaatIni.forEach { settingDao.upsert(it) }
+                run {
                     val petaIdLamaKeBaru = mutableMapOf<Long, Long>()
                     for (i in 0 until transaksiJsonArray.length()) {
                         val o = transaksiJsonArray.getJSONObject(i)
@@ -121,7 +340,7 @@ class BackupManager @Inject constructor(
                         val idBaru = transactionDao.insertAllTransactions(listOf(entity)).first()
                         petaIdLamaKeBaru[idLama] = idBaru
                     }
-                    itemJsonArray?.let { arr ->
+                    itemJsonArray.let { arr ->
                         val items = mutableListOf<com.nada.kasir.core.data.local.entity.TransactionItemEntity>()
                         for (i in 0 until arr.length()) {
                             val o = arr.getJSONObject(i)
@@ -130,7 +349,7 @@ class BackupManager @Inject constructor(
                         }
                         if (items.isNotEmpty()) transactionDao.insertAllItems(items)
                     }
-                    paymentJsonArray?.let { arr ->
+                    paymentJsonArray.let { arr ->
                         val payments = mutableListOf<com.nada.kasir.core.data.local.entity.PaymentEntity>()
                         for (i in 0 until arr.length()) {
                             val o = arr.getJSONObject(i)
@@ -139,6 +358,12 @@ class BackupManager @Inject constructor(
                         }
                         if (payments.isNotEmpty()) transactionDao.insertAllPayments(payments)
                     }
+
+                    // Mutasi stok disisipkan SETELAH transaksi, karena id transaksi berubah saat restore:
+                    // referensiTransaksiId harus dipetakan ke id baru (F-06), kalau tidak ia menunjuk ke
+                    // transaksi lain yang kebetulan memakai id yang sama.
+                    val mutasiSiap = PemetaanReferensiMutasi.petakan(stockMovements, petaIdLamaKeBaru)
+                    if (mutasiSiap.isNotEmpty()) stockMovementDao.insertAll(mutasiSiap)
                 }
             }
             Result.Success(Unit)

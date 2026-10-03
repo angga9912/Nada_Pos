@@ -12,6 +12,8 @@ sealed class AppError(val pesan: String) {
     object TransaksiGagalDisimpan : AppError("Transaksi gagal disimpan. Silakan coba lagi.")
     object PembayaranKurang : AppError("Uang pembayaran belum mencukupi.")
     object BarcodeDuplikat : AppError("Barcode sudah terdaftar pada produk lain.")
+    object PasswordBackupDiperlukan : AppError("File backup ini terenkripsi. Masukkan password backup untuk membukanya.")
+    object PasswordBackupSalah : AppError("Password backup salah, atau file backup rusak. Data Anda saat ini tidak berubah.")
     data class Lainnya(val detail: String) : AppError(detail)
 }
 

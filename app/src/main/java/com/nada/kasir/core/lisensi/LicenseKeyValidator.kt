@@ -17,10 +17,13 @@ import java.util.TimeZone
  * @param tier Paket aplikasi yang diaktifkan oleh kode ini (PRO / CUSTOM).
  * @param kadaluarsaMillis Waktu kadaluarsa lisensi dalam epoch millis (UTC),
  *   atau null jika lisensi berlaku seumur hidup (LIFETIME).
+ * @param terikatPerangkat true jika kode ini dibuat khusus untuk ID Perangkat ini (V2);
+ *   false untuk kode lama (V1) yang tidak terikat perangkat.
  */
 data class HasilValidasiLisensi(
     val tier: PaketAplikasi,
-    val kadaluarsaMillis: Long?
+    val kadaluarsaMillis: Long?,
+    val terikatPerangkat: Boolean = false
 )
 
 /**
@@ -30,8 +33,14 @@ data class HasilValidasiLisensi(
  *  - TIER          : PRO atau CUSTOM. BASIC gratis dan selalu ditolak.
  *  - EXPIRY        : "LIFETIME" atau tanggal kadaluarsa "yyyyMMdd".
  *  - TANDA-TANGAN  : tanda tangan digital ECDSA P-256 (64 byte, ditulis Base32 dan
- *                    dipotong per 8 karakter dengan tanda "-") atas pesan
- *                    "NADA-LIC-V1:TIER:EXPIRY".
+ *                    dipotong per 8 karakter dengan tanda "-") atas salah satu pesan:
+ *                      V2 (terikat perangkat): "NADA-LIC-V2:TIER:EXPIRY:ID_PERANGKAT"
+ *                      V1 (kode lama)        : "NADA-LIC-V1:TIER:EXPIRY"
+ *
+ * Format kode tidak berubah antara V1 dan V2: ID Perangkat TIDAK ditulis di dalam kode, melainkan
+ * dihitung ulang aplikasi dari HP-nya sendiri saat verifikasi. Jadi kode V2 yang dibuat untuk HP A
+ * otomatis tidak valid di HP B (pesan yang ditandatangani berbeda), dan sama sekali tidak ada
+ * yang perlu dipalsukan atau dicocokkan secara manual.
  *
  * KEAMANAN: APK hanya membawa kunci PUBLIK (BuildConfig.LICENSE_PUBLIC_KEY, dari file
  * license.public). Kunci publik hanya bisa MEMERIKSA tanda tangan, bukan membuatnya -
@@ -43,7 +52,16 @@ data class HasilValidasiLisensi(
 object LicenseKeyValidator {
 
     private const val PREFIX = "NADA"
-    private const val DOMAIN = "NADA-LIC-V1"
+    private const val DOMAIN_V1 = "NADA-LIC-V1"
+    private const val DOMAIN_V2 = "NADA-LIC-V2"
+
+    /**
+     * MASA PERALIHAN. true = kode lama (V1, tidak terikat perangkat) yang sudah terlanjur dijual
+     * masih diterima, supaya pelanggan lama tidak tiba-tiba kehilangan paketnya. Kode V1 bisa
+     * dibagikan ke HP lain, jadi setelah semua pelanggan lama dibuatkan kode baru (V2), ubah
+     * menjadi false lalu build ulang - sejak itu hanya kode terikat perangkat yang diterima.
+     */
+    private const val IZINKAN_KODE_TANPA_PERANGKAT = true
     private const val EXPIRY_LIFETIME = "LIFETIME"
     private const val EXPIRY_DATE_PATTERN = "yyyyMMdd"
     private const val ALGORITMA_TANDA_TANGAN = "SHA256withECDSA"
@@ -51,15 +69,25 @@ object LicenseKeyValidator {
     private const val ALFABET_BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 
     /**
-     * Validasi sebuah kode lisensi memakai kunci publik yang tertanam di aplikasi.
+     * Validasi sebuah kode lisensi untuk perangkat ini memakai kunci publik yang tertanam di aplikasi.
      *
-     * @return [HasilValidasiLisensi] jika kode valid (format benar, tanda tangan cocok,
-     *   dan tier bukan BASIC), atau null jika kode tidak valid dalam bentuk apapun.
+     * @param idPerangkat ID Perangkat kanonik milik HP ini (lihat [DeviceIdProvider.id]).
+     * @return [HasilValidasiLisensi] jika kode valid (format benar, tanda tangan cocok untuk
+     *   perangkat ini, dan tier bukan BASIC), atau null jika kode tidak valid dalam bentuk apapun.
      */
-    fun validasi(kode: String): HasilValidasiLisensi? = validasi(kode, BuildConfig.LICENSE_PUBLIC_KEY)
+    fun validasiUntukPerangkat(kode: String, idPerangkat: String): HasilValidasiLisensi? =
+        validasi(kode, BuildConfig.LICENSE_PUBLIC_KEY, idPerangkat, IZINKAN_KODE_TANPA_PERANGKAT)
 
-    /** Versi dengan kunci publik yang bisa diganti - dipakai unit test (kunci uji buatan test). */
-    internal fun validasi(kode: String, publicKeyBase64: String): HasilValidasiLisensi? {
+    /**
+     * Versi dengan kunci publik yang bisa diganti - dipakai unit test (kunci uji buatan test).
+     * Tanpa [idPerangkat] hanya kode lama (V1) yang bisa lolos, sama seperti perilaku sebelum F-12.
+     */
+    internal fun validasi(
+        kode: String,
+        publicKeyBase64: String,
+        idPerangkat: String? = null,
+        izinkanTanpaPerangkat: Boolean = true
+    ): HasilValidasiLisensi? {
         if (kode.isBlank() || publicKeyBase64.isBlank()) return null
 
         val bersih = kode.uppercase(Locale.ROOT).filterNot { it.isWhitespace() }
@@ -77,7 +105,14 @@ object LicenseKeyValidator {
 
         val tandaTangan = decodeBase32(bagian.drop(3).joinToString("")) ?: return null
         if (tandaTangan.size != PANJANG_TANDA_TANGAN_BYTE) return null
-        if (!tandaTanganValid("$DOMAIN:$tierMentah:$expiry", tandaTangan, publicKeyBase64)) return null
+
+        // Kode terikat perangkat (V2) diperiksa lebih dulu; kode lama (V1) hanya selama masa peralihan.
+        val idKanonik = idPerangkat?.let { PerangkatId.normalisasi(it) }
+        val terikat = idKanonik != null &&
+            tandaTanganValid("$DOMAIN_V2:$tierMentah:$expiry:$idKanonik", tandaTangan, publicKeyBase64)
+        val lama = !terikat && izinkanTanpaPerangkat &&
+            tandaTanganValid("$DOMAIN_V1:$tierMentah:$expiry", tandaTangan, publicKeyBase64)
+        if (!terikat && !lama) return null
 
         val kadaluarsaMillis = if (expiry == EXPIRY_LIFETIME) {
             null
@@ -85,7 +120,7 @@ object LicenseKeyValidator {
             parseTanggalExpiry(expiry) ?: return null
         }
 
-        return HasilValidasiLisensi(tier = tier, kadaluarsaMillis = kadaluarsaMillis)
+        return HasilValidasiLisensi(tier = tier, kadaluarsaMillis = kadaluarsaMillis, terikatPerangkat = terikat)
     }
 
     private fun tandaTanganValid(pesan: String, tandaTanganMentah: ByteArray, publicKeyBase64: String): Boolean {
@@ -143,6 +178,10 @@ object LicenseKeyValidator {
             isLenient = false
             timeZone = TimeZone.getTimeZone("UTC")
         }
-        return runCatching { format.parse(expiry)?.time }.getOrNull()
+        return runCatching {
+            val date = format.parse(expiry) ?: return@runCatching null
+            // Berlaku hingga akhir hari tanggal tersebut (23:59:59.999 UTC)
+            date.time + (24 * 60 * 60 * 1000L - 1)
+        }.getOrNull()
     }
 }

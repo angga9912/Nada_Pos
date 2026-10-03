@@ -16,6 +16,18 @@ interface ProductDao {
     """)
     fun search(query: String): Flow<List<ProductEntity>>
 
+    // Dipakai layar Kasir: gabungan filter kategori (chip) + pencarian teks sekaligus,
+    // supaya kasir bisa pilih kategori DAN mengetik cari di saat bersamaan.
+    // :categoryId null -> semua kategori. :query kosong -> tidak difilter nama/kode.
+    @Query("""
+        SELECT * FROM products
+        WHERE isActive = 1 AND deletedAt IS NULL
+        AND (:categoryId IS NULL OR categoryId = :categoryId)
+        AND (:query = '' OR nama LIKE '%' || :query || '%' OR kodeProduk LIKE '%' || :query || '%')
+        ORDER BY nama ASC
+    """)
+    fun observeFiltered(categoryId: Long?, query: String): Flow<List<ProductEntity>>
+
     @Query("SELECT * FROM products WHERE barcode = :barcode AND deletedAt IS NULL LIMIT 1")
     suspend fun findByBarcode(barcode: String): ProductEntity?
 
@@ -24,6 +36,15 @@ interface ProductDao {
 
     @Query("SELECT COUNT(*) FROM products WHERE barcode = :barcode AND deletedAt IS NULL")
     suspend fun countByBarcode(barcode: String): Int
+
+    @Query("SELECT COUNT(*) FROM products WHERE barcode = :barcode")
+    suspend fun countByBarcodeAll(barcode: String): Int
+
+    @Query("SELECT COUNT(*) FROM products WHERE kodeProduk = :kodeProduk")
+    suspend fun countByKodeProduk(kodeProduk: String): Int
+
+    @Query("SELECT COUNT(*) FROM products WHERE barcode = :barcode AND id != :excludeId AND deletedAt IS NULL")
+    suspend fun countByBarcodeExcludingId(barcode: String, excludeId: Long): Int
 
     @Query("SELECT * FROM products WHERE stok <= stokMinimum AND stok > 0 AND isActive = 1 AND deletedAt IS NULL")
     fun observeStokMenipis(): Flow<List<ProductEntity>>

@@ -84,11 +84,15 @@ class ExcelExporter(private val context: Context) {
         return simpan(wb, "PENJUALAN")
     }
 
-    fun exportStokMasuk(movements: List<StockMovementEntity>, namaProduk: (Long) -> String): File =
-        exportMutasiStok(movements.filter { it.tipe == TipeMutasiStok.MASUK }, namaProduk, tipeMasuk = true)
+    fun exportStokMasuk(
+        movements: List<StockMovementEntity>,
+        namaProduk: (Long) -> String,
+        namaSupplier: (Long?) -> String = { "" }
+    ): File =
+        exportMutasiStok(movements.filter { it.tipe == TipeMutasiStok.MASUK }, namaProduk, namaSupplier, tipeMasuk = true)
 
     fun exportStokKeluar(movements: List<StockMovementEntity>, namaProduk: (Long) -> String): File =
-        exportMutasiStok(movements.filter { it.tipe != TipeMutasiStok.MASUK }, namaProduk, tipeMasuk = false)
+        exportMutasiStok(movements.filter { it.tipe != TipeMutasiStok.MASUK }, namaProduk, { "" }, tipeMasuk = false)
 
     /** Export ringkasan laporan (poin 14). */
     fun exportLaporan(
@@ -111,7 +115,12 @@ class ExcelExporter(private val context: Context) {
         return simpan(wb, namaSheet)
     }
 
-    private fun exportMutasiStok(movements: List<StockMovementEntity>, namaProduk: (Long) -> String, tipeMasuk: Boolean): File {
+    private fun exportMutasiStok(
+        movements: List<StockMovementEntity>,
+        namaProduk: (Long) -> String,
+        namaSupplier: (Long?) -> String,
+        tipeMasuk: Boolean
+    ): File {
         val wb = XSSFWorkbook()
         val namaSheet = if (tipeMasuk) "STOK_MASUK" else "STOK_KELUAR"
         val sheet = wb.createSheet(namaSheet)
@@ -120,7 +129,7 @@ class ExcelExporter(private val context: Context) {
             buatHeader(sheet, listOf("Tanggal", "Kode Produk", "Nama Produk", "Qty", "Harga Beli", "Supplier", "Keterangan"))
             movements.forEachIndexed { idx, m ->
                 val row = sheet.createRow(idx + 1)
-                listOf(sdf.format(Date(m.tanggalWaktu)), "", namaProduk(m.productId), m.qty, "", m.supplier ?: "", m.keterangan ?: "")
+                listOf(sdf.format(Date(m.tanggalWaktu)), "", namaProduk(m.productId), m.qty, "", namaSupplier(m.supplierId), m.keterangan ?: "")
                     .forEachIndexed { i, v -> isi(row.createCell(i), v) }
             }
         } else {

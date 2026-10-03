@@ -23,4 +23,9 @@ class Converters {
     fun fromTipeMutasiStok(value: TipeMutasiStok): String = value.name
     @TypeConverter
     fun toTipeMutasiStok(value: String): TipeMutasiStok = TipeMutasiStok.valueOf(value)
+
+    @TypeConverter
+    fun fromPurchaseStatus(value: PurchaseStatus): String = value.name
+    @TypeConverter
+    fun toPurchaseStatus(value: String): PurchaseStatus = PurchaseStatus.valueOf(value)
 }

@@ -1,5 +1,6 @@
 package com.nada.kasir.core.data.repository
 
+import androidx.room.withTransaction
 import com.nada.kasir.core.data.local.AppDatabase
 import com.nada.kasir.core.data.local.dao.PurchaseDao
 import com.nada.kasir.core.data.local.dao.ProductDao

@@ -17,8 +17,14 @@ class NomorTransaksiGenerator @Inject constructor(
         val dateFormat = SimpleDateFormat("yyyyMMdd", Locale("id", "ID"))
         val today = dateFormat.format(Date())
         val prefix = "INV-$today-"
-        val countToday = transactionDao.countTodayTransactions(prefix)
-        val nextNumber = (countToday + 1).toString().padStart(4, '0')
+        val latest = transactionDao.getLatestTransactionNo(prefix)
+        val nextSeq = if (latest != null && latest.startsWith(prefix)) {
+            val suffix = latest.removePrefix(prefix).takeWhile { it.isDigit() }
+            (suffix.toIntOrNull() ?: 0) + 1
+        } else {
+            transactionDao.countTodayTransactions(prefix) + 1
+        }
+        val nextNumber = nextSeq.toString().padStart(4, '0')
         return "$prefix$nextNumber"
     }
 }

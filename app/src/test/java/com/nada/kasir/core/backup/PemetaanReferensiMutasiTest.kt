@@ -10,7 +10,7 @@ class PemetaanReferensiMutasiTest {
 
     private fun mutasi(id: Long, ref: Long?) = StockMovementEntity(
         id = id, productId = 5, tipe = TipeMutasiStok.KELUAR, qty = 2,
-        referensiTransaksiId = ref, supplier = "S", keterangan = "k", tanggalWaktu = 123L
+        referensiTransaksiId = ref, supplierId = 7L, keterangan = "k", tanggalWaktu = 123L
     )
 
     @Test
