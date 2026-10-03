@@ -102,8 +102,7 @@ object StrukFormatter {
         builder.alignCenter()
         if (store.footerStruk.isNotBlank()) builder.textLine(store.footerStruk)
 
-        val autoCut = store.ukuranKertas == "80mm"
-        builder.feedAndCut(withCut = autoCut)
+        builder.feedAndCut()
         return builder.build()
     }
 

@@ -15,8 +15,6 @@ data class ProductEntity(
     val hargaJual: Double,
     val stok: Int,
     val stokMinimum: Int = 5,
-    val supplierId: Long? = null, // Phase 5: supplier utama produk ini (untuk kemudahan reorder)
-    val outletId: Long? = null, // Phase 5: jika produk hanya tersedia di outlet spesifik (opsional)
     val fotoPath: String? = null,
     val isActive: Boolean = true,
     val deletedAt: Long? = null // soft delete (poin 26)

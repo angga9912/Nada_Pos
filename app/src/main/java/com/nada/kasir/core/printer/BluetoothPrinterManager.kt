@@ -30,10 +30,7 @@ class BluetoothPrinterManager @Inject constructor(
     private val sppUuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
     private val bluetoothAdapter: BluetoothAdapter?
-        get() {
-            val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager
-            return manager?.adapter ?: BluetoothAdapter.getDefaultAdapter()
-        }
+        get() = BluetoothAdapter.getDefaultAdapter()
 
     @SuppressLint("MissingPermission") // caller wajib cek izin BLUETOOTH_CONNECT sebelum panggil (lihat PengaturanPrinterScreen)
     fun daftarPrinterTerpasang(): List<PairedPrinterInfo> {
@@ -60,21 +57,7 @@ class BluetoothPrinterManager @Inject constructor(
             val device: BluetoothDevice = adapter.getRemoteDevice(macAddress)
             socket = device.createRfcommSocketToServiceRecord(sppUuid)
             adapter.cancelDiscovery()
-
-            // Batasi waktu koneksi maksimal 7 detik agar tidak menggantung jika printer mati/di luar jangkauan
-            val terhubung = kotlinx.coroutines.withTimeoutOrNull(7000L) {
-                try {
-                    socket.connect()
-                    true
-                } catch (e: IOException) {
-                    false
-                }
-            } ?: false
-
-            if (!terhubung) {
-                return@withContext Result.Failure(AppError.PrinterTidakTerhubung)
-            }
-
+            socket.connect()
             socket.outputStream.write(data)
             socket.outputStream.flush()
             Result.Success(Unit)
@@ -100,7 +83,7 @@ class BluetoothPrinterManager @Inject constructor(
             .alignLeft()
             .textLine("Printer terhubung dengan baik.")
             .textLine("Ukuran kertas: $ukuranKertas")
-            .feedAndCut(withCut = ukuranKertas == "80mm")
+            .feedAndCut()
             .build()
         return cetak(macAddress, data)
     }

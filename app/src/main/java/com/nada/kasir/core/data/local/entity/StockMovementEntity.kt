@@ -12,9 +12,7 @@ data class StockMovementEntity(
     val tipe: TipeMutasiStok,
     val qty: Int, // selalu positif; arah ditentukan oleh 'tipe'
     val referensiTransaksiId: Long? = null,
-    val referensiPembelianId: Long? = null, // Phase 5: link ke pembelian supplier
-    val supplierId: Long? = null, // Phase 5: supplier yang melakukan stok masuk
-    val outletId: Long? = null, // Phase 5: outlet tempat stok masuk/keluar (multi-cabang)
+    val supplier: String? = null,
     val keterangan: String? = null,
     val tanggalWaktu: Long
 )

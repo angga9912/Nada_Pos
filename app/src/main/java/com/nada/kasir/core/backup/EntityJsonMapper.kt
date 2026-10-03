@@ -22,7 +22,7 @@ object EntityJsonMapper {
     }
 
     fun storeFromJson(o: JSONObject) = StoreEntity(
-        id = o.optLong("id", 0L),
+        id = 0, // id dibiarkan auto-generate ulang saat restore
         nama = o.getString("nama"), alamat = o.optString("alamat"), whatsapp = o.optString("whatsapp"),
         telepon = o.optString("telepon"), pemilik = o.optString("pemilik"), slogan = o.optString("slogan"),
         footerStruk = o.optString("footerStruk"), formatNoTransaksi = o.optString("formatNoTransaksi"),
@@ -42,17 +42,13 @@ object EntityJsonMapper {
         put("passwordHash", u.passwordHash); put("role", u.role.name); put("aktif", u.aktif)
     }
     fun userFromJson(o: JSONObject) = UserEntity(
-        id = o.optLong("id", 0L),
         nama = o.getString("nama"), username = o.getString("username"),
         passwordHash = o.getString("passwordHash"), role = UserRole.valueOf(o.getString("role")),
         aktif = o.optBoolean("aktif", true)
     )
 
     fun categoryToJson(c: CategoryEntity) = JSONObject().apply { put("id", c.id); put("nama", c.nama) }
-    fun categoryFromJson(o: JSONObject) = CategoryEntity(
-        id = o.optLong("id", 0L),
-        nama = o.getString("nama")
-    )
+    fun categoryFromJson(o: JSONObject) = CategoryEntity(nama = o.getString("nama"))
 
     fun productToJson(p: ProductEntity) = JSONObject().apply {
         put("id", p.id); put("kodeProduk", p.kodeProduk); put("barcode", p.barcode ?: JSONObject.NULL)
@@ -62,7 +58,6 @@ object EntityJsonMapper {
         put("isActive", p.isActive); put("deletedAt", p.deletedAt ?: JSONObject.NULL)
     }
     fun productFromJson(o: JSONObject) = ProductEntity(
-        id = o.optLong("id", 0L),
         kodeProduk = o.getString("kodeProduk"),
         barcode = if (o.isNull("barcode")) null else o.optString("barcode"),
         nama = o.getString("nama"),
@@ -82,7 +77,6 @@ object EntityJsonMapper {
         put("total", t.total); put("status", t.status.name)
     }
     fun transactionFromJson(o: JSONObject) = TransactionEntity(
-        id = o.optLong("id", 0L),
         noTransaksi = o.getString("noTransaksi"), nomorAntrian = o.optInt("nomorAntrian", 0),
         namaPembeli = if (o.isNull("namaPembeli")) null else o.optString("namaPembeli"),
         tanggalWaktu = o.getLong("tanggalWaktu"),
@@ -98,7 +92,6 @@ object EntityJsonMapper {
         put("diskon", i.diskon); put("subtotal", i.subtotal)
     }
     fun itemFromJson(o: JSONObject, transactionIdBaru: Long) = TransactionItemEntity(
-        id = o.optLong("id", 0L),
         transactionId = transactionIdBaru, productId = o.optLong("productId", 0L),
         namaProdukSnapshot = o.getString("namaProdukSnapshot"), qty = o.getInt("qty"),
         harga = o.getDouble("harga"), diskon = o.optDouble("diskon", 0.0), subtotal = o.getDouble("subtotal")
@@ -111,7 +104,6 @@ object EntityJsonMapper {
         put("catatanMetode", p.catatanMetode)
     }
     fun paymentFromJson(o: JSONObject, transactionIdBaru: Long) = PaymentEntity(
-        id = o.optLong("id", 0L),
         transactionId = transactionIdBaru, metode = MetodePembayaran.valueOf(o.getString("metode")),
         jumlahDiterima = o.getDouble("jumlahDiterima"), kembalian = o.getDouble("kembalian"),
         catatanMetode = if (o.has("catatanMetode") && !o.isNull("catatanMetode")) o.getString("catatanMetode") else null
@@ -125,7 +117,6 @@ object EntityJsonMapper {
         put("tanggalWaktu", m.tanggalWaktu)
     }
     fun stockMovementFromJson(o: JSONObject) = StockMovementEntity(
-        id = o.optLong("id", 0L),
         productId = o.optLong("productId", 0L), tipe = TipeMutasiStok.valueOf(o.getString("tipe")),
         qty = o.getInt("qty"), referensiTransaksiId = if (o.isNull("referensiTransaksiId")) null else o.optLong("referensiTransaksiId"),
         supplier = if (o.isNull("supplier")) null else o.optString("supplier"),
@@ -138,25 +129,8 @@ object EntityJsonMapper {
         put("ukuranKertas", p.ukuranKertas); put("isDefault", p.isDefault)
     }
     fun printerFromJson(o: JSONObject) = PrinterEntity(
-        id = o.optLong("id", 0L),
         nama = o.getString("nama"), macAddress = o.getString("macAddress"),
         ukuranKertas = o.optString("ukuranKertas", "58mm"), isDefault = o.optBoolean("isDefault", false)
-    )
-
-    fun auditLogToJson(a: com.nada.kasir.core.data.local.entity.AuditLogEntity) = JSONObject().apply {
-        put("id", a.id)
-        put("userId", a.userId)
-        put("aksi", a.aksi)
-        put("detail", a.detail)
-        put("tanggalWaktu", a.tanggalWaktu)
-    }
-
-    fun auditLogFromJson(o: JSONObject) = com.nada.kasir.core.data.local.entity.AuditLogEntity(
-        id = o.optLong("id", 0L),
-        userId = o.getLong("userId"),
-        aksi = o.getString("aksi"),
-        detail = o.getString("detail"),
-        tanggalWaktu = o.getLong("tanggalWaktu")
     )
 
     fun settingToJson(s: SettingEntity) = JSONObject().apply { put("key", s.key); put("value", s.value) }
