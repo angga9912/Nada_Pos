@@ -127,7 +127,14 @@ fun InfoPaketScreen(
                         onClick = { KontakSupport.bukaWhatsAppUpgrade(context, paketTujuan, viewModel.idPerangkat) },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                     ) {
-                        Text("Upgrade ke ${paketTujuan.label} via WhatsApp")
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Upgrade ke ${paketTujuan.label} via WhatsApp")
+                            Text(
+                                paketTujuan.hargaLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                     // Tombol trial sengaja pakai TextButton (bukan OutlinedButton/Button) supaya
                     // tidak lebih menonjol dari tombol Upgrade berbayar di atasnya - trial cuma
@@ -185,6 +192,22 @@ private fun TabelPerbandingan(paketAktif: PaketAplikasi) {
             }
             HorizontalDivider()
 
+            // Baris harga - satu-satunya tempat angka harga ditampilkan di tabel; sumbernya PaketAplikasi.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Harga",
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                    modifier = Modifier.weight(1.4f)
+                )
+                HargaPaket(PaketAplikasi.BASIC, Modifier.weight(1f))
+                HargaPaket(PaketAplikasi.CUSTOM, Modifier.weight(1f))
+                HargaPaket(PaketAplikasi.PRO, Modifier.weight(1f))
+            }
+            HorizontalDivider(Modifier.padding(horizontal = 12.dp))
+
             daftarFitur.forEachIndexed { index, fitur ->
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
@@ -238,6 +261,16 @@ private fun HeaderPaket(paket: PaketAplikasi, paketAktif: PaketAplikasi, modifie
             }
         }
     }
+}
+
+@Composable
+private fun HargaPaket(paket: PaketAplikasi, modifier: Modifier = Modifier) {
+    Text(
+        paket.hargaSingkat,
+        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+        textAlign = TextAlign.Center,
+        modifier = modifier
+    )
 }
 
 @Composable

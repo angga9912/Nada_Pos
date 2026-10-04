@@ -19,7 +19,7 @@ object KontakSupport {
      * perlu mengetik ulang.
      */
     fun bukaWhatsAppUpgrade(context: Context, paketTujuan: PaketAplikasi, idPerangkat: String? = null) {
-        val pesan = "Halo, saya ingin upgrade Nada POS ke paket ${paketTujuan.label}. Mohon info lebih lanjut." +
+        val pesan = "Halo, saya ingin upgrade Nada POS ke paket ${paketTujuan.label} (${paketTujuan.hargaLabel}). Mohon info lebih lanjut." +
             blokIdPerangkat(idPerangkat)
         bukaWhatsApp(context, pesan)
     }
