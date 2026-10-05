@@ -72,6 +72,34 @@ dibuat untuk HP A otomatis tidak valid di HP B.
   memperpanjang langganan. Ini perlindungan offline; menghapus data aplikasi lalu mengaktifkan ulang
   sambil memundurkan jam masih bisa lolos (hanya validasi online yang menutupnya sepenuhnya).
 
+### Risiko operasional lisensi (F-09)
+- **ID Perangkat terikat ke kunci tanda tangan APK.** Di Android 8+, ANDROID_ID bergantung pada kombinasi
+  kunci tanda tangan, pengguna, dan perangkat. Jika keystore rilis hilang atau dibuat ulang, ID semua
+  pelanggan berubah dan **semua kode lisensi yang sudah terbit berhenti berlaku**. Perlakukan keystore
+  sama pentingnya dengan `license.private`: simpan salinan di dua tempat terpisah dari repo.
+- **Penjaga di CI:** job `build-release` mencetak sidik jari SHA-256 keystore dan menggagalkan build bila
+  berbeda dari GitHub Variable `KEYSTORE_SHA256`. Setelah keystore dibuat, jalankan
+  `tools/generate_keystore.sh` (sidik jari tercetak di akhir) atau lihat log build pertama, lalu isi
+  variable itu di Settings → Secrets and variables → Actions → **Variables**.
+- **APK demo dan full memakai kunci yang sama** selama secret keystore ada: job `build` menandatangani
+  APK demo debug dengan keystore rilis, dan `build.gradle.kts` melakukan hal yang sama untuk build debug
+  lokal bila `keystore.properties` ada. Akibatnya ID Perangkat di APK demo sama dengan di APK full, dan
+  build demo baru bisa dipasang menimpa build demo lama. Tanpa secret (mis. PR dari fork), build memakai
+  keystore debug runner dan ID-nya berbeda. Jangan minta pelanggan mengambil ID dari APK yang berbeda dari
+  APK yang akan mereka pakai; teks di Pengaturan Toko juga mengingatkan hal ini.
+  *Perhatian saat pertama kali:* APK demo lama (ditandatangani kunci debug acak) tidak bisa ditimpa oleh
+  APK demo baru; pasang ulang (data demo hilang) sekali saja.
+- **Kadaluarsa dicek berkala.** Selain saat aplikasi dibuka, `SessionHolderViewModel` mengecek lisensi
+  setiap 5 menit selama aplikasi hidup, sehingga toko yang membiarkan aplikasi terbuka berhari-hari tetap
+  turun ke Basic saat langganan habis.
+- **Kode tanpa ID Perangkat (V1)** masih diterima selama `IZINKAN_KODE_TANPA_PERANGKAT = true` dan berlaku
+  di HP mana pun. Kode V1 berlangganan akan hilang sendiri saat kedaluwarsa; kode V1 *lifetime* adalah
+  yang paling berisiko tersebar. Setelah semua kode V1 yang pernah dijual kedaluwarsa atau diganti,
+  ubah flag itu menjadi `false`.
+- **Tidak ada pencabutan kode.** Aplikasi tidak punya izin internet, jadi kode yang sudah terbit tidak
+  bisa dibatalkan dari jauh. Mitigasinya: terbitkan kode berlangganan pendek (bulanan) dan hindari
+  kode lifetime.
+
 Batasan yang tetap perlu dipahami: validasi berjalan offline di dalam APK, jadi orang yang
 sangat berniat masih bisa mem-patch APK agar selalu menganggap lisensi valid (bukan
 membuat kode palsu). Obfuscation R8 (aktif di build release) mempersulit hal itu; untuk
@@ -93,7 +121,8 @@ dipublikasikan/diupdate secara resmi). Sekarang sudah ada signing config:
 4. Untuk build otomatis lewat GitHub Actions, isi GitHub Secrets
    `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` (lihat
    komentar job `build-release` di `.github/workflows/android-build.yml`) -
-   job ini otomatis aktif begitu secret-secret itu terisi.
+   job ini otomatis aktif begitu secret-secret itu terisi. Isi juga GitHub *Variable*
+   `KEYSTORE_SHA256` (sidik jari keystore) supaya CI menolak keystore yang tertukar.
 5. Kalau `keystore.properties` belum ada, `assembleFullRelease` tetap bisa
    jalan (pakai signing debug bawaan) supaya tidak menghalangi testing lokal -
    tapi APK hasilnya **tidak boleh didistribusikan ke pelanggan**.

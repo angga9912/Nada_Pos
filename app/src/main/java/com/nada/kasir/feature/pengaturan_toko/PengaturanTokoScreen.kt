@@ -126,7 +126,8 @@ fun PengaturanTokoScreen(viewModel: PengaturanTokoViewModel = hiltViewModel()) {
             }
         }
         Text(
-            "Kirim ID ini ke penjual saat meminta kode aktivasi. Kode hanya berlaku di perangkat ini.",
+            "Kirim ID ini ke penjual saat meminta kode aktivasi. Kode hanya berlaku di perangkat ini. " +
+                "ID bisa berbeda bila aplikasi dipasang dari sumber/APK lain, jadi ambil ID dari aplikasi yang akan dipakai.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

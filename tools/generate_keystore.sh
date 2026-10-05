@@ -11,6 +11,10 @@
 #   dari aplikasi "baru" dengan identitas signing berbeda.
 # - Backup file .keystore/.jks hasil script ini ke tempat aman (password manager,
 #   hard drive terpisah, dll), TERPISAH dari backup kode/Git.
+# - Kode lisensi pelanggan terikat ke ID Perangkat, dan ID itu diturunkan dari ANDROID_ID yang
+#   bergantung pada kunci tanda tangan APK. Keystore baru = ID Perangkat semua pelanggan berubah =
+#   semua kode lisensi yang sudah terbit tidak berlaku lagi. Jadi keystore ini sama pentingnya
+#   dengan kunci privat lisensi (license.private).
 #
 # Cara pakai:
 #   chmod +x tools/generate_keystore.sh
@@ -49,3 +53,6 @@ echo "1. Copy keystore.properties.example jadi keystore.properties di root proje
 echo "2. Isi storeFile=$OUTPUT_FILE, keyAlias=$ALIAS, dan password yang baru saja Anda buat."
 echo "3. Backup $OUTPUT_FILE ke tempat aman TERPISAH dari repo Git Anda."
 echo "4. Jalankan: ./gradlew assembleDemoRelease  (APK hasil akan sudah ditandatangani)"
+echo "5. Catat sidik jari SHA-256 di bawah ini; simpan juga sebagai GitHub Variable KEYSTORE_SHA256"
+echo "   supaya CI menolak build bila keystore tertukar:"
+keytool -list -v -keystore "$OUTPUT_FILE" -alias "$ALIAS" | grep -i "SHA256:" | head -n 1

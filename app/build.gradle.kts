@@ -105,6 +105,15 @@ android {
     }
 
     buildTypes {
+        // F-09: ANDROID_ID (dasar ID Perangkat lisensi) di Android 8+ terikat pada kunci tanda tangan APK.
+        // Tanpa ini, APK debug/demo dari CI memakai keystore debug acak milik runner (berbeda tiap build),
+        // sehingga ID Perangkat di APK demo TIDAK sama dengan di APK full release di HP yang sama. Bila
+        // keystore.properties ada, debug/demo ikut ditandatangani kunci yang sama dengan release.
+        debug {
+            if (keystoreTersedia) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
         release {
             // R8 AKTIF: kode di-obfuscate (nama kelas/method/variabel diacak), dipangkas, dan
             // resource yang tidak terpakai dibuang -> APK lebih kecil & jauh lebih sulit dibaca
