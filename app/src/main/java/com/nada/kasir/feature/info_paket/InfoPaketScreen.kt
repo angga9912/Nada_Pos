@@ -36,6 +36,9 @@ private val daftarFitur = listOf(
     BarisFitur("Export ke Excel", basic = false, custom = true, pro = true),
     BarisFitur("Backup & Restore Data", basic = false, custom = true, pro = true),
     BarisFitur("Multi User (Admin & Kasir)", basic = false, custom = false, pro = true),
+    BarisFitur("Supplier", basic = false, custom = false, pro = true),
+    BarisFitur("Outlet / Cabang", basic = false, custom = false, pro = true),
+    BarisFitur("Hutang / Piutang", basic = false, custom = false, pro = true),
 )
 
 /**
@@ -152,7 +155,7 @@ fun InfoPaketScreen(
                     onClick = {
                         KontakSupport.bukaWhatsApp(
                             context,
-                            "Halo, saya sudah pakai Nada POS Pro dan ingin tanya fitur tambahan (Hutang/Piutang, Supplier, Multi Cabang)."
+                            "Halo, saya sudah pakai Nada POS Pro dan ingin tanya fitur tambahan."
                         )
                     },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)

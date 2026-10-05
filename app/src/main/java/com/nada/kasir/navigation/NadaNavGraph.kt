@@ -18,7 +18,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.nada.kasir.core.data.local.entity.UserRole
+import com.nada.kasir.core.paket.FiturPaket
 import com.nada.kasir.core.paket.PaketAplikasi
+import com.nada.kasir.core.paket.mengizinkan
 import com.nada.kasir.core.session.SessionManager
 import com.nada.kasir.feature.backup.BackupScreen
 import com.nada.kasir.feature.dashboard.DashboardScreen
@@ -102,7 +104,9 @@ fun NadaNavGraph(navController: NavHostController = rememberNavController()) {
             AdminRouteGuard(sessionManager, navController) { PengaturanPrinterScreen() }
         }
         composable(NadaRoute.Backup.route) {
-            AdminRouteGuard(sessionManager, navController) { BackupScreen() }
+            AdminRouteGuard(sessionManager, navController) {
+                PaketRouteGuard(paketAktif, FiturPaket.BACKUP, navController) { BackupScreen() }
+            }
         }
         composable(NadaRoute.Laporan.route) {
             AdminRouteGuard(sessionManager, navController) {
@@ -118,18 +122,26 @@ fun NadaNavGraph(navController: NavHostController = rememberNavController()) {
         }
         composable(NadaRoute.Pengguna.route) {
             AdminRouteGuard(sessionManager, navController) {
-                val currentUserId = sessionManager.currentUser.value?.id ?: 1L
-                com.nada.kasir.feature.pengguna.PenggunaScreen(currentUserId = currentUserId)
+                PaketRouteGuard(paketAktif, FiturPaket.PENGGUNA, navController) {
+                    val currentUserId = sessionManager.currentUser.value?.id ?: 1L
+                    com.nada.kasir.feature.pengguna.PenggunaScreen(currentUserId = currentUserId)
+                }
             }
         }
         composable(NadaRoute.Supplier.route) {
-            AdminRouteGuard(sessionManager, navController) { SupplierScreen() }
+            AdminRouteGuard(sessionManager, navController) {
+                PaketRouteGuard(paketAktif, FiturPaket.SUPPLIER, navController) { SupplierScreen() }
+            }
         }
         composable(NadaRoute.Outlet.route) {
-            AdminRouteGuard(sessionManager, navController) { OutletScreen() }
+            AdminRouteGuard(sessionManager, navController) {
+                PaketRouteGuard(paketAktif, FiturPaket.OUTLET, navController) { OutletScreen() }
+            }
         }
         composable(NadaRoute.HutangPiutang.route) {
-            AdminRouteGuard(sessionManager, navController) { HutangPiutangScreen() }
+            AdminRouteGuard(sessionManager, navController) {
+                PaketRouteGuard(paketAktif, FiturPaket.HUTANG_PIUTANG, navController) { HutangPiutangScreen() }
+            }
         }
         composable(NadaRoute.InfoPaket.route) {
             InfoPaketScreen(onKembali = { navController.popBackStack() })
@@ -161,6 +173,43 @@ private fun AdminRouteGuard(
         }
     } else {
         content()
+    }
+}
+
+/**
+ * Penjaga rute berdasarkan PAKET (F-17). Dipasang DI DALAM [AdminRouteGuard]: pengguna non-admin
+ * tetap melihat "Akses Dibatasi", sedangkan admin di paket yang belum mencakup fitur melihat layar
+ * terkunci. Menyembunyikan menu saja tidak cukup karena rute tetap bisa dibuka dari tempat lain.
+ */
+@Composable
+private fun PaketRouteGuard(
+    paketAktif: PaketAplikasi,
+    fitur: FiturPaket,
+    navController: NavHostController,
+    content: @Composable () -> Unit
+) {
+    if (paketAktif.mengizinkan(fitur)) {
+        content()
+    } else {
+        FiturTerkunci(
+            fitur = fitur,
+            onBukaInfoPaket = { navController.navigate(NadaRoute.InfoPaket.route) },
+            onKembali = { navController.popBackStack() }
+        )
+    }
+}
+
+@Composable
+private fun FiturTerkunci(fitur: FiturPaket, onBukaInfoPaket: () -> Unit, onKembali: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("${fitur.nama} tersedia di paket ${fitur.labelPaketTersedia}", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            Text("Upgrade paket untuk memakai fitur ini.", style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(16.dp))
+            Button(onClick = onBukaInfoPaket) { Text("Lihat Paket") }
+            TextButton(onClick = onKembali) { Text("Kembali") }
+        }
     }
 }
 

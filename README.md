@@ -178,7 +178,7 @@ Perbaikan:
 
 
 Satu source code sekarang bisa melayani 3 tingkat paket komersial (poin 29 brief
-awal), diatur lewat 1 dropdown di **Pengaturan Toko** (Admin) — tanpa perlu
+awal), diaktifkan lewat kode lisensi di **Pengaturan Toko** (Admin) — tanpa perlu
 build APK terpisah per paket.
 
 | Fitur | Basic | Custom | Pro |
@@ -190,16 +190,27 @@ build APK terpisah per paket.
 | Laporan (Harian/Bulanan/Stok) | ❌ | ✅ | ✅ |
 | Backup & Restore Data | ❌ | ✅ | ✅ |
 | Manajemen Pengguna (Multi User Admin/Kasir) | ❌ | ❌ | ✅ |
+| Supplier | ❌ | ❌ | ✅ |
+| Outlet / Cabang | ❌ | ❌ | ✅ |
+| Hutang / Piutang | ❌ | ❌ | ✅ |
 
 - ✅ `PaketAplikasi` (enum BASIC/CUSTOM/PRO) + `PaketRepository` — disimpan di
   tabel `settings` yang sudah ada (mekanisme sama seperti feature flags poin 22).
 - ✅ Pemilih paket di Pengaturan Toko, langsung menyembunyikan/menampilkan menu
   terkait di Dashboard, Produk, dan Pengaturan tanpa perlu restart aplikasi.
-- ✅ Default paket = **PRO** (supaya instalasi yang sudah ada, termasuk yang
-  sedang Anda uji, tidak kehilangan menu tiba-tiba) — ganti manual ke Basic/Custom
-  saat deploy ke pelanggan sesuai paket yang mereka beli.
-- 🔜 Slot **Pro** sudah disiapkan untuk fitur Phase 5 mendatang (Hutang/Piutang,
-  Supplier, Multi Cabang) tanpa perlu restrukturisasi lagi.
+- ✅ Default paket = **BASIC** (model freemium, lihat `PaketRepository`). Paket naik hanya lewat
+  kode lisensi yang valid; paket kembali ke Basic bila lisensi kedaluwarsa.
+- ✅ **Pembatasan fitur per paket ada di satu tempat: `core/paket/FiturPaket.kt`.** Menu di tab
+  Lainnya, penjaga rute di `NadaNavGraph` (`PaketRouteGuard`), dan tabel di Info Paket memakai
+  definisi yang sama, jadi fitur yang menunya disembunyikan tidak bisa dibuka lewat rute. Paket
+  yang belum mencakup fitur melihat layar "tersedia di paket ..." dengan tombol ke Info Paket.
+  Untuk membatasi fitur baru: tambahkan satu entri di `FiturPaket`, pasang `PaketRouteGuard`
+  pada rutenya, dan tambahkan barisnya di `InfoPaketScreen`.
+- ✅ Supplier, Outlet/Cabang, dan Hutang/Piutang khusus **Pro**; Backup & Restore untuk **Custom**
+  ke atas; Manajemen Pengguna khusus **Pro**. Data yang sudah dibuat tidak dihapus bila paket
+  turun ke Basic — datanya tetap ada, hanya layarnya terkunci sampai paket naik lagi.
+- ⚠️ Modul Phase 5 masih dasar: Hutang/Piutang baru mencatat piutang manual (belum terhubung ke
+  penjualan di Kasir), Pembelian belum punya layar, dan `outletId` belum terisi di transaksi.
 
 
 
@@ -464,8 +475,10 @@ di ZIP ini, jadi tidak perlu setup tambahan.
 
 **Phase 4 (selesai)** — ~~Laporan~~, ~~User Admin/Kasir~~, ~~Custom Branding penuh~~.
 
-**Phase 5 (berikutnya)** — Modul opsional per pelanggan: Hutang/Piutang, Supplier, Multi cabang
-— ditambahkan sebagai modul baru di `feature/`, tanpa mengubah `core/`.
+**Phase 5 (sebagian)** — Modul Supplier, Outlet/Cabang, dan Hutang/Piutang sudah ada sebagai layar
+dasar di `feature/` (khusus paket Pro) dan ikut Backup/Restore. Yang belum: pelunasan dan hutang
+(bukan hanya piutang), hubungan Hutang/Piutang dengan penjualan Kasir, layar Pembelian, dan
+pemakaian `outletId` pada transaksi.
 
 ## Struktur Folder
 

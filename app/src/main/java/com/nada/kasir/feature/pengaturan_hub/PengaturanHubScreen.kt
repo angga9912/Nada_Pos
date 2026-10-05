@@ -20,7 +20,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.nada.kasir.core.paket.PaketAplikasi
+import com.nada.kasir.core.paket.FiturPaket
+import com.nada.kasir.core.paket.mengizinkan
 import com.nada.kasir.core.util.Result
 
 private data class ItemPengaturan(
@@ -48,13 +49,19 @@ fun PengaturanHubScreen(
     val itemAdmin = buildList {
         add(ItemPengaturan("Pengaturan Printer", "Kelola printer thermal Bluetooth", Icons.Filled.Print, onBukaPengaturanPrinter))
         add(ItemPengaturan("Pengaturan Toko", "Identitas toko, struk, dan warna aplikasi", Icons.Filled.Storefront, onBukaPengaturanToko))
-        add(ItemPengaturan("Supplier", "Kelola pemasok / vendor", Icons.Filled.LocalShipping, onBukaSupplier))
-        add(ItemPengaturan("Outlet / Cabang", "Kelola cabang dan lokasi", Icons.Filled.Store, onBukaOutlet))
-        add(ItemPengaturan("Hutang / Piutang", "Catat tagihan dan piutang", Icons.Filled.AccountBalanceWallet, onBukaHutangPiutang))
-        if (paketAktif.mencakup(PaketAplikasi.PRO)) {
+        if (paketAktif.mengizinkan(FiturPaket.SUPPLIER)) {
+            add(ItemPengaturan("Supplier", "Kelola pemasok / vendor", Icons.Filled.LocalShipping, onBukaSupplier))
+        }
+        if (paketAktif.mengizinkan(FiturPaket.OUTLET)) {
+            add(ItemPengaturan("Outlet / Cabang", "Kelola cabang dan lokasi", Icons.Filled.Store, onBukaOutlet))
+        }
+        if (paketAktif.mengizinkan(FiturPaket.HUTANG_PIUTANG)) {
+            add(ItemPengaturan("Hutang / Piutang", "Catat tagihan dan piutang", Icons.Filled.AccountBalanceWallet, onBukaHutangPiutang))
+        }
+        if (paketAktif.mengizinkan(FiturPaket.PENGGUNA)) {
             add(ItemPengaturan("Manajemen Pengguna", "Kelola akun admin dan kasir", Icons.Filled.Group, onBukaPengguna))
         }
-        if (paketAktif.mencakup(PaketAplikasi.CUSTOM)) {
+        if (paketAktif.mengizinkan(FiturPaket.BACKUP)) {
             add(ItemPengaturan("Backup & Restore Data", "Cadangkan atau pulihkan seluruh data", Icons.Filled.CloudUpload, onBukaBackup))
         }
         add(ItemPengaturan("Info Paket & Upgrade", "Bandingkan Basic, Custom, dan Pro", Icons.Filled.WorkspacePremium, onBukaInfoPaket))

@@ -7,8 +7,10 @@ package com.nada.kasir.core.paket
  *
  * BASIC   - Kasir, Produk, Stok, Print Struk (kebutuhan inti toko kecil)
  * CUSTOM  - Semua Basic + Custom Branding, Excel Import/Export, Laporan, Backup/Restore
- * PRO     - Semua Custom + Manajemen Pengguna (multi user Admin/Kasir)
- *           (siap diperluas: Hutang/Piutang, Supplier, Multi Cabang - Phase 5)
+ * PRO     - Semua Custom + Manajemen Pengguna (multi user Admin/Kasir), Supplier,
+ *           Outlet/Cabang, dan Hutang/Piutang
+ *
+ * Batas fitur per paket ada di [FiturPaket] (satu sumber kebenaran untuk menu dan rute).
  */
 enum class PaketAplikasi(
     val label: String,
@@ -23,7 +25,10 @@ enum class PaketAplikasi(
         "Custom", "Semua fitur Basic + Custom Branding, Excel, Laporan, dan Backup/Restore.",
         hargaPerBulan = 25_000, hargaMulaiDari = true
     ),
-    PRO("Pro", "Semua fitur Custom + Multi User (Admin & Kasir) dengan hak akses terpisah.", hargaPerBulan = 50_000);
+    PRO(
+        "Pro", "Semua fitur Custom + Multi User (Admin & Kasir), Supplier, Outlet, dan Hutang/Piutang.",
+        hargaPerBulan = 50_000
+    );
 
     fun mencakup(fitur: PaketAplikasi): Boolean = this.ordinal >= fitur.ordinal
 
