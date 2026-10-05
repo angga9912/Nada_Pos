@@ -40,7 +40,8 @@ fun BackupScreen(viewModel: BackupViewModel = hiltViewModel()) {
         Text("Backup & Restore Data", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(4.dp))
         Text(
-            "Mencakup: Produk (termasuk foto), Stok, Transaksi, Pengaturan Toko (termasuk logo), Pengguna, Printer. " +
+            "Mencakup: Produk (termasuk foto), Stok, Transaksi, Pengaturan Toko (termasuk logo), Pengguna, Printer, " +
+                "Supplier, Outlet, Hutang/Piutang, Pembelian, dan Audit Log. " +
                 "File backup dienkripsi dengan password yang Anda tentukan, jadi aman dikirim atau disimpan di Google Drive.",
             style = MaterialTheme.typography.bodySmall
         )

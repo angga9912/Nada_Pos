@@ -26,4 +26,12 @@ object PemetaanReferensiMutasi {
             else -> m.copy(referensiTransaksiId = petaIdLamaKeBaru[lama])
         }
     }
+
+    /**
+     * Backup versi 1 (sebelum data Phase 5 ikut dibackup) tidak membawa tabel supplier, outlet, dan
+     * pembelian. Referensi `referensiPembelianId`, `supplierId`, dan `outletId` pada mutasi stok di
+     * backup itu pasti menggantung setelah restore, jadi dikosongkan (F-02).
+     */
+    fun bersihkanReferensiFase5(mutasi: List<StockMovementEntity>): List<StockMovementEntity> =
+        mutasi.map { it.copy(referensiPembelianId = null, supplierId = null, outletId = null) }
 }

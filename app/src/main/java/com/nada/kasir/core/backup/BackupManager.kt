@@ -5,7 +5,13 @@ import android.net.Uri
 import androidx.room.withTransaction
 import com.nada.kasir.core.data.local.AppDatabase
 import com.nada.kasir.core.data.local.dao.*
+import com.nada.kasir.core.data.local.entity.AuditLogEntity
+import com.nada.kasir.core.data.local.entity.HutangPiutangEntity
+import com.nada.kasir.core.data.local.entity.OutletEntity
+import com.nada.kasir.core.data.local.entity.PurchaseEntity
+import com.nada.kasir.core.data.local.entity.PurchaseItemEntity
 import com.nada.kasir.core.data.local.entity.SettingEntity
+import com.nada.kasir.core.data.local.entity.SupplierEntity
 import com.nada.kasir.core.lisensi.KunciPengaturanLisensi
 import com.nada.kasir.core.util.AppError
 import com.nada.kasir.core.util.Result
@@ -24,12 +30,15 @@ import java.util.zip.ZipOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val BACKUP_VERSION = 1
+// Versi 2: ikut membawa data Phase 5 (supplier, outlet, hutang/piutang, pembelian, audit log) + kolom
+// supplierId/outletId/hutangSisa/hutangPiutangId. Backup versi 1 tetap bisa dipulihkan.
+private const val BACKUP_VERSION = 2
 private const val ENTRI_JSON = "backup.json"
 
 /**
  * BACKUP DATA / RESTORE DATA (poin 17).
- * Mencakup: Produk, Stok, Transaksi, Pengaturan Toko, Pengguna, Printer, DAN foto produk
+ * Mencakup: Produk, Stok, Transaksi, Pengaturan Toko, Pengguna, Printer, Supplier, Outlet,
+ * Hutang/Piutang, Pembelian, Audit Log, DAN foto produk
  * + logo toko (sebelumnya cuma path-nya yang tersimpan di JSON, file fotonya sendiri
  * tertinggal di penyimpanan internal HP lama - jadi hilang setelah pindah HP/instal ulang.
  * Sekarang file backup berupa .zip: "backup.json" + file foto asli, bukan .json polos).
@@ -53,7 +62,12 @@ class BackupManager @Inject constructor(
     private val transactionDao: TransactionDao,
     private val stockMovementDao: StockMovementDao,
     private val printerDao: PrinterDao,
-    private val settingDao: SettingDao
+    private val settingDao: SettingDao,
+    private val supplierDao: SupplierDao,
+    private val outletDao: OutletDao,
+    private val hutangPiutangDao: HutangPiutangDao,
+    private val purchaseDao: PurchaseDao,
+    private val auditLogDao: AuditLogDao
 ) {
     fun folderBackup(): File {
         val dir = File(context.getExternalFilesDir(null), "backup")
@@ -64,8 +78,9 @@ class BackupManager @Inject constructor(
     /**
      * Path foto (fotoPath/logoPath) tersimpan sebagai path ABSOLUT (mis.
      * "/data/user/0/com.nada.kasir/files/produk_foto/foto_x.png"), sedangkan di dalam zip
-     * disimpan sebagai path RELATIF terhadap filesDir ("produk_foto/foto_x.png") - supaya
-     * tetap benar walau di-restore ke HP lain dengan absolute path yang beda persis.
+     * disimpan sebagai path RELATIF terhadap filesDir ("produk_foto/foto_x.png"). Fungsi ini dipakai
+     * saat BACKUP (path berasal dari HP ini sendiri). Saat RESTORE, pemetaan path dari HP/aplikasi lain
+     * ditangani [PemetaanPathFoto].
      * null kalau path-nya di luar filesDir (dianggap tidak valid/tidak dikenal, dilewati).
      */
     private fun keRelatif(absolutePath: String?): String? {
@@ -103,6 +118,12 @@ class BackupManager @Inject constructor(
             root.put("payments", EntityJsonMapper.listToJsonArray(transactionDao.getAllPaymentsForBackup(), EntityJsonMapper::paymentToJson))
             root.put("stockMovements", EntityJsonMapper.listToJsonArray(stockMovementDao.getAllForBackup(), EntityJsonMapper::stockMovementToJson))
             root.put("printers", EntityJsonMapper.listToJsonArray(printerDao.getAllForBackup(), EntityJsonMapper::printerToJson))
+            root.put("suppliers", EntityJsonMapper.listToJsonArray(supplierDao.getAllForBackup(), EntityJsonMapper::supplierToJson))
+            root.put("outlets", EntityJsonMapper.listToJsonArray(outletDao.getAllForBackup(), EntityJsonMapper::outletToJson))
+            root.put("hutangPiutang", EntityJsonMapper.listToJsonArray(hutangPiutangDao.getAllForBackup(), EntityJsonMapper::hutangPiutangToJson))
+            root.put("purchases", EntityJsonMapper.listToJsonArray(purchaseDao.getAllPurchasesForBackup(), EntityJsonMapper::purchaseToJson))
+            root.put("purchaseItems", EntityJsonMapper.listToJsonArray(purchaseDao.getAllItemsForBackup(), EntityJsonMapper::purchaseItemToJson))
+            root.put("auditLogs", EntityJsonMapper.listToJsonArray(auditLogDao.getAllForBackup(), EntityJsonMapper::auditLogToJson))
             root.put("settings", EntityJsonMapper.listToJsonArray(
                 settingDao.getAllForBackup().filter { it.key !in KunciPengaturanLisensi.SEMUA },
                 EntityJsonMapper::settingToJson
@@ -244,6 +265,12 @@ class BackupManager @Inject constructor(
         val printers: List<com.nada.kasir.core.data.local.entity.PrinterEntity>
         val settings: List<com.nada.kasir.core.data.local.entity.SettingEntity>
         val stockMovements: List<com.nada.kasir.core.data.local.entity.StockMovementEntity>
+        val suppliers: List<SupplierEntity>
+        val outlets: List<OutletEntity>
+        val hutangPiutang: List<HutangPiutangEntity>
+        val purchases: List<PurchaseEntity>
+        val purchaseItems: List<PurchaseItemEntity>
+        val auditLogs: List<AuditLogEntity>
         val transaksiJsonArray: org.json.JSONArray
         val itemJsonArray: org.json.JSONArray
         val paymentJsonArray: org.json.JSONArray
@@ -254,7 +281,23 @@ class BackupManager @Inject constructor(
             products = EntityJsonMapper.jsonArrayToList(root.getJSONArray("products"), EntityJsonMapper::productFromJson)
             printers = EntityJsonMapper.jsonArrayToList(root.getJSONArray("printers"), EntityJsonMapper::printerFromJson)
             settings = EntityJsonMapper.jsonArrayToList(root.getJSONArray("settings"), EntityJsonMapper::settingFromJson)
-            stockMovements = EntityJsonMapper.jsonArrayToList(root.getJSONArray("stockMovements"), EntityJsonMapper::stockMovementFromJson)
+            val stockMovementsAsli = EntityJsonMapper.jsonArrayToList(root.getJSONArray("stockMovements"), EntityJsonMapper::stockMovementFromJson)
+
+            // Data Phase 5 hanya ada di backup versi >= 2. Pada versi itu bagiannya WAJIB lengkap
+            // (parsing ketat, sama seperti bagian lain). Backup versi 1 dianggap tidak punya data tsb.
+            if (root.getInt("versiBackup") >= 2) {
+                suppliers = EntityJsonMapper.jsonArrayToList(root.getJSONArray("suppliers"), EntityJsonMapper::supplierFromJson)
+                outlets = EntityJsonMapper.jsonArrayToList(root.getJSONArray("outlets"), EntityJsonMapper::outletFromJson)
+                hutangPiutang = EntityJsonMapper.jsonArrayToList(root.getJSONArray("hutangPiutang"), EntityJsonMapper::hutangPiutangFromJson)
+                purchases = EntityJsonMapper.jsonArrayToList(root.getJSONArray("purchases"), EntityJsonMapper::purchaseFromJson)
+                purchaseItems = EntityJsonMapper.jsonArrayToList(root.getJSONArray("purchaseItems"), EntityJsonMapper::purchaseItemFromJson)
+                auditLogs = EntityJsonMapper.jsonArrayToList(root.getJSONArray("auditLogs"), EntityJsonMapper::auditLogFromJson)
+                stockMovements = stockMovementsAsli
+            } else {
+                suppliers = emptyList(); outlets = emptyList(); hutangPiutang = emptyList()
+                purchases = emptyList(); purchaseItems = emptyList(); auditLogs = emptyList()
+                stockMovements = PemetaanReferensiMutasi.bersihkanReferensiFase5(stockMovementsAsli)
+            }
 
             // Transaksi butuh pemetaan ID lama -> ID baru supaya item & payment tetap terhubung ke induknya.
             // Ketiganya juga divalidasi penuh di sini (bukan baru di dalam transaksi DB).
@@ -292,7 +335,10 @@ class BackupManager @Inject constructor(
         fun tulisFotoDanPetakanUlang(pathLama: String?): String? {
             // Path yang mengandung ".." berasal dari backup tidak tepercaya -> dibuang, bukan dipakai.
             if (pathLama != null && pathLama.split('/').any { it == ".." }) return null
-            val relatif = keRelatif(pathLama) ?: return pathLama
+            // F-07: cocokkan ke entri zip yang ada, bukan ke awalan filesDir HP ini, supaya backup dari
+            // package lain (APK demo) atau profil pengguna Android lain tetap bisa dipulihkan.
+            val relatif = PemetaanPathFoto.cariRelatif(pathLama, entriFoto.keys, context.filesDir.absolutePath)
+                ?: return pathLama
             val bytes = entriFoto[relatif] ?: return pathLama
             return try {
                 val tujuan = File(context.filesDir, relatif)
@@ -322,6 +368,10 @@ class BackupManager @Inject constructor(
                 }
                 storeDao.clearAll(); userDao.clearAll(); categoryDao.clearAll(); productDao.clearAll()
                 printerDao.clearAll(); settingDao.clearAll(); stockMovementDao.clearAll()
+                // Data Phase 5 ikut digantikan penuh: baris lama tidak boleh tersisa dengan rujukan
+                // (supplierId, purchaseId, ...) yang sudah tidak cocok dengan data hasil restore.
+                purchaseDao.clearItems(); purchaseDao.clearPurchases(); hutangPiutangDao.clearAll()
+                supplierDao.clearAll(); outletDao.clearAll(); auditLogDao.clearAll()
                 transactionDao.clearPayments(); transactionDao.clearItems(); transactionDao.clearTransactions()
 
                 if (storesSiap.isNotEmpty()) storeDao.insertAll(storesSiap)
@@ -329,6 +379,14 @@ class BackupManager @Inject constructor(
                 if (categories.isNotEmpty()) categoryDao.insertAll(categories)
                 if (productsSiap.isNotEmpty()) productDao.insertAll(productsSiap)
                 if (printers.isNotEmpty()) printerDao.insertAll(printers)
+                // id dipertahankan, jadi products.supplierId, purchases.supplierId, payments.hutangPiutangId,
+                // dan mutasi stok tetap menunjuk ke baris yang benar.
+                if (suppliers.isNotEmpty()) supplierDao.insertAll(suppliers)
+                if (outlets.isNotEmpty()) outletDao.insertAll(outlets)
+                if (hutangPiutang.isNotEmpty()) hutangPiutangDao.insertAll(hutangPiutang)
+                if (purchases.isNotEmpty()) purchaseDao.insertAllPurchases(purchases)
+                if (purchaseItems.isNotEmpty()) purchaseDao.insertAllItems(purchaseItems)
+                if (auditLogs.isNotEmpty()) auditLogDao.insertAll(auditLogs)
                 settings.filter { it.key !in KunciPengaturanLisensi.SEMUA }.forEach { settingDao.upsert(it) }
                 lisensiSaatIni.forEach { settingDao.upsert(it) }
                 run {

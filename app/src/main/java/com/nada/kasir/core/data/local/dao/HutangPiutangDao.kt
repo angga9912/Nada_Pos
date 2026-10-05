@@ -26,4 +26,12 @@ interface HutangPiutangDao {
 
     @Query("SELECT * FROM hutang_piutang WHERE id = :id LIMIT 1")
     suspend fun findById(id: Long): HutangPiutangEntity?
+
+    // Backup & Restore (F-02)
+    @Query("SELECT * FROM hutang_piutang")
+    suspend fun getAllForBackup(): List<HutangPiutangEntity>
+    @Insert
+    suspend fun insertAll(entities: List<HutangPiutangEntity>)
+    @Query("DELETE FROM hutang_piutang")
+    suspend fun clearAll()
 }

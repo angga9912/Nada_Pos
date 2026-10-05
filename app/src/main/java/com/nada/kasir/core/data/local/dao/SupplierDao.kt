@@ -26,4 +26,12 @@ interface SupplierDao {
 
     @Query("SELECT * FROM suppliers WHERE id = :id LIMIT 1")
     suspend fun findById(id: Long): SupplierEntity?
+
+    // Backup & Restore (F-02)
+    @Query("SELECT * FROM suppliers")
+    suspend fun getAllForBackup(): List<SupplierEntity>
+    @Insert
+    suspend fun insertAll(entities: List<SupplierEntity>)
+    @Query("DELETE FROM suppliers")
+    suspend fun clearAll()
 }

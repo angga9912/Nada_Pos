@@ -54,4 +54,14 @@ class PemetaanReferensiMutasiTest {
     fun `daftar kosong tetap kosong`() {
         assertEquals(emptyList<StockMovementEntity>(), PemetaanReferensiMutasi.petakan(emptyList(), mapOf(1L to 2L)))
     }
+
+    @Test
+    fun `backup versi 1 mengosongkan referensi phase 5 yang pasti menggantung`() {
+        val asli = mutasi(1, 1).copy(referensiPembelianId = 4L, supplierId = 7L, outletId = 2L)
+        val hasil = PemetaanReferensiMutasi.bersihkanReferensiFase5(listOf(asli)).single()
+        assertNull(hasil.referensiPembelianId)
+        assertNull(hasil.supplierId)
+        assertNull(hasil.outletId)
+        assertEquals(1L, hasil.referensiTransaksiId) // referensi transaksi tidak ikut dihapus
+    }
 }

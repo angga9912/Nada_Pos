@@ -26,4 +26,12 @@ interface OutletDao {
 
     @Query("SELECT * FROM outlets WHERE id = :id LIMIT 1")
     suspend fun findById(id: Long): OutletEntity?
+
+    // Backup & Restore (F-02)
+    @Query("SELECT * FROM outlets")
+    suspend fun getAllForBackup(): List<OutletEntity>
+    @Insert
+    suspend fun insertAll(entities: List<OutletEntity>)
+    @Query("DELETE FROM outlets")
+    suspend fun clearAll()
 }

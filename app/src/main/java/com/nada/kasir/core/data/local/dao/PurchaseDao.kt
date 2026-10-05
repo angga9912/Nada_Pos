@@ -36,4 +36,18 @@ interface PurchaseDao {
 
     @Query("UPDATE purchases SET hutangSisa = :sisa, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updateHutangSisa(id: Long, sisa: Double, updatedAt: Long)
+
+    // Backup & Restore (F-02)
+    @Query("SELECT * FROM purchases")
+    suspend fun getAllPurchasesForBackup(): List<PurchaseEntity>
+    @Query("SELECT * FROM purchase_items")
+    suspend fun getAllItemsForBackup(): List<PurchaseItemEntity>
+    @Insert
+    suspend fun insertAllPurchases(entities: List<PurchaseEntity>)
+    @Insert
+    suspend fun insertAllItems(items: List<PurchaseItemEntity>)
+    @Query("DELETE FROM purchase_items")
+    suspend fun clearItems()
+    @Query("DELETE FROM purchases")
+    suspend fun clearPurchases()
 }

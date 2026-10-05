@@ -59,6 +59,7 @@ object EntityJsonMapper {
         put("nama", p.nama); put("categoryId", p.categoryId ?: JSONObject.NULL); put("satuan", p.satuan)
         put("hargaBeli", p.hargaBeli); put("hargaJual", p.hargaJual); put("stok", p.stok)
         put("stokMinimum", p.stokMinimum); put("fotoPath", p.fotoPath ?: JSONObject.NULL)
+        put("supplierId", p.supplierId ?: JSONObject.NULL); put("outletId", p.outletId ?: JSONObject.NULL)
         put("isActive", p.isActive); put("deletedAt", p.deletedAt ?: JSONObject.NULL)
     }
     fun productFromJson(o: JSONObject) = ProductEntity(
@@ -70,6 +71,8 @@ object EntityJsonMapper {
         satuan = o.optString("satuan", "pcs"), hargaBeli = o.optDouble("hargaBeli", 0.0),
         hargaJual = o.optDouble("hargaJual", 0.0), stok = o.optInt("stok", 0),
         stokMinimum = o.optInt("stokMinimum", 5),
+        supplierId = optLongOrNull(o, "supplierId"),
+        outletId = optLongOrNull(o, "outletId"),
         fotoPath = if (o.isNull("fotoPath")) null else o.optString("fotoPath"),
         isActive = o.optBoolean("isActive", true),
         deletedAt = if (o.isNull("deletedAt")) null else o.optLong("deletedAt")
@@ -80,14 +83,17 @@ object EntityJsonMapper {
         put("namaPembeli", t.namaPembeli ?: JSONObject.NULL); put("tanggalWaktu", t.tanggalWaktu)
         put("userId", t.userId); put("subtotal", t.subtotal); put("diskon", t.diskon)
         put("total", t.total); put("status", t.status.name)
+        put("outletId", t.outletId ?: JSONObject.NULL); put("hutangSisa", t.hutangSisa)
     }
     fun transactionFromJson(o: JSONObject) = TransactionEntity(
         id = o.optLong("id", 0L),
         noTransaksi = o.getString("noTransaksi"), nomorAntrian = o.optInt("nomorAntrian", 0),
         namaPembeli = if (o.isNull("namaPembeli")) null else o.optString("namaPembeli"),
+        outletId = optLongOrNull(o, "outletId"),
         tanggalWaktu = o.getLong("tanggalWaktu"),
         userId = o.optLong("userId", 1L), subtotal = o.getDouble("subtotal"), diskon = o.optDouble("diskon", 0.0),
-        total = o.getDouble("total"), status = TransactionStatus.valueOf(o.optString("status", "COMPLETED"))
+        total = o.getDouble("total"), hutangSisa = o.optDouble("hutangSisa", 0.0),
+        status = TransactionStatus.valueOf(o.optString("status", "COMPLETED"))
     )
     // id lama transaksi disimpan terpisah agar transaction_items & payments bisa dipetakan ulang saat restore
     fun transactionOldId(o: JSONObject) = o.getLong("id")
@@ -109,11 +115,13 @@ object EntityJsonMapper {
         put("id", p.id); put("transactionId", p.transactionId); put("metode", p.metode.name)
         put("jumlahDiterima", p.jumlahDiterima); put("kembalian", p.kembalian)
         put("catatanMetode", p.catatanMetode)
+        put("hutangPiutangId", p.hutangPiutangId ?: JSONObject.NULL)
     }
     fun paymentFromJson(o: JSONObject, transactionIdBaru: Long) = PaymentEntity(
         id = o.optLong("id", 0L),
         transactionId = transactionIdBaru, metode = MetodePembayaran.valueOf(o.getString("metode")),
         jumlahDiterima = o.getDouble("jumlahDiterima"), kembalian = o.getDouble("kembalian"),
+        hutangPiutangId = optLongOrNull(o, "hutangPiutangId"),
         catatanMetode = if (o.has("catatanMetode") && !o.isNull("catatanMetode")) o.getString("catatanMetode") else null
     )
     fun paymentOldTransactionId(o: JSONObject) = o.getLong("transactionId")
@@ -169,6 +177,80 @@ object EntityJsonMapper {
         aksi = o.getString("aksi"),
         detail = o.getString("detail"),
         tanggalWaktu = o.getLong("tanggalWaktu")
+    )
+
+    // ---- Data Phase 5 (F-02): id dipertahankan apa adanya saat restore, jadi referensi antar tabel
+    // (supplierId, outletId, purchaseId, hutangPiutangId) tetap menunjuk ke baris yang benar. ----
+
+    fun supplierToJson(s: SupplierEntity) = JSONObject().apply {
+        put("id", s.id); put("nama", s.nama); put("kontak", s.kontak); put("telepon", s.telepon)
+        put("alamat", s.alamat); put("npwp", s.npwp); put("catatan", s.catatan); put("aktif", s.aktif)
+        put("createdAt", s.createdAt); put("updatedAt", s.updatedAt)
+    }
+    fun supplierFromJson(o: JSONObject) = SupplierEntity(
+        id = o.optLong("id", 0L), nama = o.getString("nama"), kontak = o.optString("kontak"),
+        telepon = o.optString("telepon"), alamat = o.optString("alamat"), npwp = o.optString("npwp"),
+        catatan = o.optString("catatan"), aktif = o.optBoolean("aktif", true),
+        createdAt = o.optLong("createdAt", 0L), updatedAt = o.optLong("updatedAt", 0L)
+    )
+
+    fun outletToJson(t: OutletEntity) = JSONObject().apply {
+        put("id", t.id); put("nama", t.nama); put("kode", t.kode); put("alamat", t.alamat)
+        put("telepon", t.telepon); put("aktif", t.aktif); put("createdAt", t.createdAt); put("updatedAt", t.updatedAt)
+    }
+    fun outletFromJson(o: JSONObject) = OutletEntity(
+        id = o.optLong("id", 0L), nama = o.getString("nama"), kode = o.getString("kode"),
+        alamat = o.optString("alamat"), telepon = o.optString("telepon"), aktif = o.optBoolean("aktif", true),
+        createdAt = o.optLong("createdAt", 0L), updatedAt = o.optLong("updatedAt", 0L)
+    )
+
+    fun hutangPiutangToJson(h: HutangPiutangEntity) = JSONObject().apply {
+        put("id", h.id); put("jenis", h.jenis); put("pelaku", h.pelaku)
+        put("nomorReferensi", h.nomorReferensi ?: JSONObject.NULL)
+        put("jumlah", h.jumlah); put("sisa", h.sisa); put("status", h.status)
+        put("tanggalTransaksi", h.tanggalTransaksi)
+        put("tanggalJatuhTempo", h.tanggalJatuhTempo ?: JSONObject.NULL)
+        put("keterangan", h.keterangan ?: JSONObject.NULL)
+        put("createdAt", h.createdAt); put("updatedAt", h.updatedAt)
+    }
+    fun hutangPiutangFromJson(o: JSONObject) = HutangPiutangEntity(
+        id = o.optLong("id", 0L), jenis = o.getString("jenis"), pelaku = o.getString("pelaku"),
+        nomorReferensi = if (o.isNull("nomorReferensi")) null else o.optString("nomorReferensi"),
+        jumlah = o.getDouble("jumlah"), sisa = o.getDouble("sisa"), status = o.optString("status", "AKTIF"),
+        tanggalTransaksi = o.getLong("tanggalTransaksi"),
+        tanggalJatuhTempo = optLongOrNull(o, "tanggalJatuhTempo"),
+        keterangan = if (o.isNull("keterangan")) null else o.optString("keterangan"),
+        createdAt = o.optLong("createdAt", 0L), updatedAt = o.optLong("updatedAt", 0L)
+    )
+
+    fun purchaseToJson(p: PurchaseEntity) = JSONObject().apply {
+        put("id", p.id); put("noPembelian", p.noPembelian); put("supplierId", p.supplierId)
+        put("outletId", p.outletId ?: JSONObject.NULL); put("tanggalPembelian", p.tanggalPembelian)
+        put("tanggalTerima", p.tanggalTerima ?: JSONObject.NULL); put("subtotal", p.subtotal)
+        put("diskonSupplier", p.diskonSupplier); put("totalBayar", p.totalBayar)
+        put("hutangSisa", p.hutangSisa); put("status", p.status.name)
+        put("keterangan", p.keterangan ?: JSONObject.NULL)
+        put("createdAt", p.createdAt); put("updatedAt", p.updatedAt)
+    }
+    fun purchaseFromJson(o: JSONObject) = PurchaseEntity(
+        id = o.optLong("id", 0L), noPembelian = o.getString("noPembelian"), supplierId = o.getLong("supplierId"),
+        outletId = optLongOrNull(o, "outletId"), tanggalPembelian = o.getLong("tanggalPembelian"),
+        tanggalTerima = optLongOrNull(o, "tanggalTerima"), subtotal = o.getDouble("subtotal"),
+        diskonSupplier = o.optDouble("diskonSupplier", 0.0), totalBayar = o.getDouble("totalBayar"),
+        hutangSisa = o.optDouble("hutangSisa", 0.0), status = PurchaseStatus.valueOf(o.getString("status")),
+        keterangan = if (o.isNull("keterangan")) null else o.optString("keterangan"),
+        createdAt = o.optLong("createdAt", 0L), updatedAt = o.optLong("updatedAt", 0L)
+    )
+
+    fun purchaseItemToJson(i: PurchaseItemEntity) = JSONObject().apply {
+        put("id", i.id); put("purchaseId", i.purchaseId); put("productId", i.productId)
+        put("namaProdukSnapshot", i.namaProdukSnapshot); put("qty", i.qty); put("hargaBeli", i.hargaBeli)
+        put("diskon", i.diskon); put("subtotal", i.subtotal)
+    }
+    fun purchaseItemFromJson(o: JSONObject) = PurchaseItemEntity(
+        id = o.optLong("id", 0L), purchaseId = o.getLong("purchaseId"), productId = o.getLong("productId"),
+        namaProdukSnapshot = o.getString("namaProdukSnapshot"), qty = o.getInt("qty"),
+        hargaBeli = o.getDouble("hargaBeli"), diskon = o.optDouble("diskon", 0.0), subtotal = o.getDouble("subtotal")
     )
 
     fun settingToJson(s: SettingEntity) = JSONObject().apply { put("key", s.key); put("value", s.value) }

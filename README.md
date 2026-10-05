@@ -299,7 +299,11 @@ Sudah ditambahkan di atas Phase 1 & 2:
   otomatis DILEWATI (bukan menimpa), semua baris valid disimpan dalam satu
   DB transaction. Pesan error tetap berbahasa manusia ("File Excel tidak sesuai format.")
 - ✅ **Backup Data (terenkripsi)** — `BackupManager` mengekspor seluruh data penting (Produk, Stok,
-  Transaksi, Pengaturan Toko, Pengguna, Printer, foto) ke satu file `.nadabak`, bisa dibagikan.
+  Transaksi, Pengaturan Toko, Pengguna, Printer, Supplier, Outlet, Hutang/Piutang, Pembelian,
+  Audit Log, foto) ke satu file `.nadabak`, bisa dibagikan. Format backup versi 2 membawa data
+  Phase 5 tersebut; backup versi 1 tetap bisa dipulihkan (data Phase 5 di HP dikosongkan karena
+  restore selalu menggantikan seluruh data). Foto produk/logo dari backup yang dibuat APK lain
+  (mis. demo `com.nada.kasir.demo`) atau profil pengguna Android lain ikut dipulihkan.
   File **dienkripsi dengan password pilihan pemilik toko** (minimal 8 karakter): AES-256-GCM, kunci
   diturunkan dengan PBKDF2-HMAC-SHA256 (150.000 iterasi, salt dan IV acak per file), sehingga isi
   (omzet, transaksi, hash password akun) tidak terbaca oleh siapa pun yang memegang filenya, dan
