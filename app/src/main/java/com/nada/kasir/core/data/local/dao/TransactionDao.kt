@@ -44,6 +44,13 @@ interface TransactionDao {
     @Query("UPDATE transactions SET status = :status WHERE id = :id")
     suspend fun updateStatus(id: Long, status: TransactionStatus)
 
+    /** Transaksi yang melahirkan catatan piutang tertentu (null bila catatan dibuat manual). */
+    @Query("SELECT transactionId FROM payments WHERE hutangPiutangId = :hutangPiutangId LIMIT 1")
+    suspend fun getTransactionIdByHutangPiutang(hutangPiutangId: Long): Long?
+
+    @Query("UPDATE transactions SET hutangSisa = :hutangSisa WHERE id = :id")
+    suspend fun updateHutangSisa(id: Long, hutangSisa: Double)
+
     @Query("SELECT COALESCE(SUM(total),0) FROM transactions WHERE status = 'COMPLETED' AND tanggalWaktu BETWEEN :startMillis AND :endMillis")
     fun observeTotalPenjualan(startMillis: Long, endMillis: Long): Flow<Double>
 

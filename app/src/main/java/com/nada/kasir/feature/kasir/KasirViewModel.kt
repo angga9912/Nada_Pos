@@ -10,9 +10,12 @@ import com.nada.kasir.core.data.repository.PrinterRepository
 import com.nada.kasir.core.data.repository.ProductRepository
 import com.nada.kasir.core.data.repository.StoreRepository
 import com.nada.kasir.core.data.repository.TransactionRepository
+import com.nada.kasir.core.domain.logic.HutangPiutangLogic
 import com.nada.kasir.core.domain.logic.PembayaranCalculator
 import com.nada.kasir.core.domain.model.KeranjangItem
+import com.nada.kasir.core.paket.FiturPaket
 import com.nada.kasir.core.paket.PaketAplikasi
+import com.nada.kasir.core.paket.mengizinkan
 import com.nada.kasir.core.paket.PaketRepository
 import com.nada.kasir.core.printer.BluetoothPrinterManager
 import com.nada.kasir.core.printer.StrukFormatter
@@ -52,8 +55,11 @@ data class KasirUiState(
     val sedangMencetak: Boolean = false,
     val barcodeBelumTerdaftar: String? = null,
     val jumlahTransaksiHariIni: Int = 0,
-    val tampilkanSaranUpgrade: Boolean = false
+    val tampilkanSaranUpgrade: Boolean = false,
+    val paketAktif: PaketAplikasi = PaketAplikasi.BASIC
 ) {
+    /** Metode "Piutang (bayar nanti)" di dialog pembayaran hanya untuk paket yang mencakup Hutang/Piutang. */
+    val piutangTersedia: Boolean get() = paketAktif.mengizinkan(FiturPaket.HUTANG_PIUTANG)
     val subtotal: Double get() = keranjang.sumOf { it.harga * it.qty }
     val total: Double get() = subtotal - diskonTotal
 }
@@ -125,6 +131,7 @@ class KasirViewModel @Inject constructor(
             kategoriTerpilihId = flows[11] as Long?,
             store = flows[12] as com.nada.kasir.core.data.local.entity.StoreEntity?,
             jumlahTransaksiHariIni = jumlahTransaksiHariIni,
+            paketAktif = paketAktif,
             // Cuma tampil kalau: masih Basic (Custom/Pro tidak perlu diajak upgrade lagi),
             // sudah lewat ambang harian, DAN belum ditutup kasir HARI ini juga.
             tampilkanSaranUpgrade = paketAktif == PaketAplikasi.BASIC &&
@@ -248,7 +255,19 @@ class KasirViewModel @Inject constructor(
         }
     }
 
-    fun bayar(userId: Long, metode: MetodePembayaran, jumlahDiterima: Double, namaPembeli: String? = null, catatanMetode: String? = null) {
+    fun bayar(
+        userId: Long,
+        metode: MetodePembayaran,
+        jumlahDiterima: Double,
+        namaPembeli: String? = null,
+        catatanMetode: String? = null,
+        jatuhTempoHari: Int? = null
+    ) {
+        // Penjagaan di sini (bukan hanya di dialog): paket di bawah Pro tidak boleh membuat piutang.
+        if (metode == MetodePembayaran.HUTANG && !uiState.value.piutangTersedia) {
+            errorFlow.value = "Penjualan piutang tersedia di paket Pro."
+            return
+        }
         viewModelScope.launch {
             prosesBayarFlow.value = true
             val result = transactionRepository.simpanTransaksiKasir(
@@ -258,7 +277,8 @@ class KasirViewModel @Inject constructor(
                 metode = metode,
                 jumlahDiterima = jumlahDiterima,
                 namaPembeli = namaPembeli,
-                catatanMetode = catatanMetode
+                catatanMetode = catatanMetode,
+                jatuhTempoPiutang = HutangPiutangLogic.jatuhTempoDariHari(jatuhTempoHari, System.currentTimeMillis())
             )
             prosesBayarFlow.value = false
             when (result) {

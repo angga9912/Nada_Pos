@@ -7,6 +7,7 @@ import com.nada.kasir.core.data.local.MIGRATION_1_2
 import com.nada.kasir.core.data.local.MIGRATION_2_3
 import com.nada.kasir.core.data.local.MIGRATION_3_4
 import com.nada.kasir.core.data.local.MIGRATION_4_5
+import com.nada.kasir.core.data.local.MIGRATION_5_6
 import com.nada.kasir.core.data.local.dao.*
 import dagger.Module
 import dagger.Provides
@@ -23,7 +24,7 @@ object DatabaseModule {
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
         return Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.DB_NAME)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
     }

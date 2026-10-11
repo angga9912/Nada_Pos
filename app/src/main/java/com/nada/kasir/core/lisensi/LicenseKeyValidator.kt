@@ -19,11 +19,14 @@ import java.util.TimeZone
  *   atau null jika lisensi berlaku seumur hidup (LIFETIME).
  * @param terikatPerangkat true jika kode ini dibuat khusus untuk ID Perangkat ini (V2);
  *   false untuk kode lama (V1) yang tidak terikat perangkat.
+ * @param trial true jika kode ini ditandatangani KUNCI TRIAL (bukan kunci lisensi utama), yaitu kode
+ *   percobaan otomatis dari WhatsApp. Kode trial selalu terikat perangkat dan berumur pendek.
  */
 data class HasilValidasiLisensi(
     val tier: PaketAplikasi,
     val kadaluarsaMillis: Long?,
-    val terikatPerangkat: Boolean = false
+    val terikatPerangkat: Boolean = false,
+    val trial: Boolean = false
 )
 
 /**
@@ -69,6 +72,14 @@ object LicenseKeyValidator {
     private const val ALFABET_BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 
     /**
+     * Batas umur kode trial dihitung dari saat divalidasi. Server bot membuat kode 14 hari (maksimal 14);
+     * kode itu berlaku sampai akhir hari UTC (hingga ~14 hari 23 jam 59 menit dari sekarang), jadi 16 hari
+     * memberi ruang sekitar satu hari bila jam HP pelanggan tertinggal. Kode trial yang masa berlakunya
+     * lebih jauh dari ini ditolak - jadi kebocoran kunci trial tidak bisa dipakai membuat lisensi panjang.
+     */
+    private const val MAKS_MASA_TRIAL_MS = 16L * 24 * 60 * 60 * 1000
+
+    /**
      * Validasi sebuah kode lisensi untuk perangkat ini memakai kunci publik yang tertanam di aplikasi.
      *
      * @param idPerangkat ID Perangkat kanonik milik HP ini (lihat [DeviceIdProvider.id]).
@@ -77,6 +88,28 @@ object LicenseKeyValidator {
      */
     fun validasiUntukPerangkat(kode: String, idPerangkat: String): HasilValidasiLisensi? =
         validasi(kode, BuildConfig.LICENSE_PUBLIC_KEY, idPerangkat, IZINKAN_KODE_TANPA_PERANGKAT)
+            ?: validasiTrial(kode, BuildConfig.TRIAL_LICENSE_PUBLIC_KEY, idPerangkat, System.currentTimeMillis())
+
+    /**
+     * Validasi kode TRIAL (kunci terpisah dari kunci lisensi utama). Syarat tambahan di atas tanda tangan:
+     *  - wajib terikat ke ID Perangkat ini (kode V1 tanpa perangkat tidak pernah diterima),
+     *  - tidak boleh LIFETIME,
+     *  - masa berlaku paling lama [MAKS_MASA_TRIAL_MS] dari [sekarangMillis].
+     * Kunci trial kosong (file license.trial.public tidak ada) = trial dinonaktifkan.
+     */
+    internal fun validasiTrial(
+        kode: String,
+        trialPublicKeyBase64: String,
+        idPerangkat: String?,
+        sekarangMillis: Long
+    ): HasilValidasiLisensi? {
+        if (trialPublicKeyBase64.isBlank() || idPerangkat == null) return null
+        val hasil = validasi(kode, trialPublicKeyBase64, idPerangkat, izinkanTanpaPerangkat = false) ?: return null
+        if (!hasil.terikatPerangkat) return null
+        val kadaluarsa = hasil.kadaluarsaMillis ?: return null // trial tidak boleh seumur hidup
+        if (kadaluarsa - sekarangMillis > MAKS_MASA_TRIAL_MS) return null
+        return hasil.copy(trial = true)
+    }
 
     /**
      * Versi dengan kunci publik yang bisa diganti - dipakai unit test (kunci uji buatan test).

@@ -7,6 +7,7 @@ import com.nada.kasir.core.data.local.AppDatabase
 import com.nada.kasir.core.data.local.dao.*
 import com.nada.kasir.core.data.local.entity.AuditLogEntity
 import com.nada.kasir.core.data.local.entity.HutangPiutangEntity
+import com.nada.kasir.core.data.local.entity.HutangPiutangPembayaranEntity
 import com.nada.kasir.core.data.local.entity.OutletEntity
 import com.nada.kasir.core.data.local.entity.PurchaseEntity
 import com.nada.kasir.core.data.local.entity.PurchaseItemEntity
@@ -31,8 +32,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 // Versi 2: ikut membawa data Phase 5 (supplier, outlet, hutang/piutang, pembelian, audit log) + kolom
-// supplierId/outletId/hutangSisa/hutangPiutangId. Backup versi 1 tetap bisa dipulihkan.
-private const val BACKUP_VERSION = 2
+// supplierId/outletId/hutangSisa/hutangPiutangId.
+// Versi 3: + riwayat pembayaran hutang/piutang (hutangPiutangPembayaran).
+// Backup versi 1 dan 2 tetap bisa dipulihkan (bagian yang tidak ada dianggap kosong).
+private const val BACKUP_VERSION = 3
 private const val ENTRI_JSON = "backup.json"
 
 /**
@@ -121,6 +124,7 @@ class BackupManager @Inject constructor(
             root.put("suppliers", EntityJsonMapper.listToJsonArray(supplierDao.getAllForBackup(), EntityJsonMapper::supplierToJson))
             root.put("outlets", EntityJsonMapper.listToJsonArray(outletDao.getAllForBackup(), EntityJsonMapper::outletToJson))
             root.put("hutangPiutang", EntityJsonMapper.listToJsonArray(hutangPiutangDao.getAllForBackup(), EntityJsonMapper::hutangPiutangToJson))
+            root.put("hutangPiutangPembayaran", EntityJsonMapper.listToJsonArray(hutangPiutangDao.getAllPembayaranForBackup(), EntityJsonMapper::hutangPiutangPembayaranToJson))
             root.put("purchases", EntityJsonMapper.listToJsonArray(purchaseDao.getAllPurchasesForBackup(), EntityJsonMapper::purchaseToJson))
             root.put("purchaseItems", EntityJsonMapper.listToJsonArray(purchaseDao.getAllItemsForBackup(), EntityJsonMapper::purchaseItemToJson))
             root.put("auditLogs", EntityJsonMapper.listToJsonArray(auditLogDao.getAllForBackup(), EntityJsonMapper::auditLogToJson))
@@ -268,6 +272,7 @@ class BackupManager @Inject constructor(
         val suppliers: List<SupplierEntity>
         val outlets: List<OutletEntity>
         val hutangPiutang: List<HutangPiutangEntity>
+        val hutangPiutangPembayaran: List<HutangPiutangPembayaranEntity>
         val purchases: List<PurchaseEntity>
         val purchaseItems: List<PurchaseItemEntity>
         val auditLogs: List<AuditLogEntity>
@@ -292,8 +297,13 @@ class BackupManager @Inject constructor(
                 purchases = EntityJsonMapper.jsonArrayToList(root.getJSONArray("purchases"), EntityJsonMapper::purchaseFromJson)
                 purchaseItems = EntityJsonMapper.jsonArrayToList(root.getJSONArray("purchaseItems"), EntityJsonMapper::purchaseItemFromJson)
                 auditLogs = EntityJsonMapper.jsonArrayToList(root.getJSONArray("auditLogs"), EntityJsonMapper::auditLogFromJson)
+                // Riwayat cicilan baru ada sejak versi 3; backup versi 2 tidak punya bagian ini.
+                hutangPiutangPembayaran = if (root.getInt("versiBackup") >= 3) {
+                    EntityJsonMapper.jsonArrayToList(root.getJSONArray("hutangPiutangPembayaran"), EntityJsonMapper::hutangPiutangPembayaranFromJson)
+                } else emptyList()
                 stockMovements = stockMovementsAsli
             } else {
+                hutangPiutangPembayaran = emptyList()
                 suppliers = emptyList(); outlets = emptyList(); hutangPiutang = emptyList()
                 purchases = emptyList(); purchaseItems = emptyList(); auditLogs = emptyList()
                 stockMovements = PemetaanReferensiMutasi.bersihkanReferensiFase5(stockMovementsAsli)
@@ -370,7 +380,7 @@ class BackupManager @Inject constructor(
                 printerDao.clearAll(); settingDao.clearAll(); stockMovementDao.clearAll()
                 // Data Phase 5 ikut digantikan penuh: baris lama tidak boleh tersisa dengan rujukan
                 // (supplierId, purchaseId, ...) yang sudah tidak cocok dengan data hasil restore.
-                purchaseDao.clearItems(); purchaseDao.clearPurchases(); hutangPiutangDao.clearAll()
+                purchaseDao.clearItems(); purchaseDao.clearPurchases(); hutangPiutangDao.clearPembayaran(); hutangPiutangDao.clearAll()
                 supplierDao.clearAll(); outletDao.clearAll(); auditLogDao.clearAll()
                 transactionDao.clearPayments(); transactionDao.clearItems(); transactionDao.clearTransactions()
 
@@ -384,6 +394,7 @@ class BackupManager @Inject constructor(
                 if (suppliers.isNotEmpty()) supplierDao.insertAll(suppliers)
                 if (outlets.isNotEmpty()) outletDao.insertAll(outlets)
                 if (hutangPiutang.isNotEmpty()) hutangPiutangDao.insertAll(hutangPiutang)
+                if (hutangPiutangPembayaran.isNotEmpty()) hutangPiutangDao.insertAllPembayaran(hutangPiutangPembayaran)
                 if (purchases.isNotEmpty()) purchaseDao.insertAllPurchases(purchases)
                 if (purchaseItems.isNotEmpty()) purchaseDao.insertAllItems(purchaseItems)
                 if (auditLogs.isNotEmpty()) auditLogDao.insertAll(auditLogs)

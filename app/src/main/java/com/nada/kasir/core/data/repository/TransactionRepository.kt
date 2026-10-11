@@ -3,10 +3,12 @@ package com.nada.kasir.core.data.repository
 import androidx.room.withTransaction
 import com.nada.kasir.core.data.local.AppDatabase
 import com.nada.kasir.core.data.local.dao.AuditLogDao
+import com.nada.kasir.core.data.local.dao.HutangPiutangDao
 import com.nada.kasir.core.data.local.dao.ProductDao
 import com.nada.kasir.core.data.local.dao.StockMovementDao
 import com.nada.kasir.core.data.local.dao.TransactionDao
 import com.nada.kasir.core.data.local.entity.*
+import com.nada.kasir.core.domain.logic.HutangPiutangLogic
 import com.nada.kasir.core.domain.logic.PembayaranCalculator
 import com.nada.kasir.core.domain.model.KeranjangItem
 import com.nada.kasir.core.util.AppError
@@ -24,6 +26,7 @@ class TransactionRepository @Inject constructor(
     private val productDao: ProductDao,
     private val stockMovementDao: StockMovementDao,
     private val auditLogDao: AuditLogDao,
+    private val hutangPiutangDao: HutangPiutangDao,
     private val nomorTransaksiGenerator: NomorTransaksiGenerator,
     private val nomorAntrianGenerator: NomorAntrianGenerator
 ) {
@@ -42,7 +45,8 @@ class TransactionRepository @Inject constructor(
         metode: MetodePembayaran,
         jumlahDiterima: Double,
         namaPembeli: String? = null,
-        catatanMetode: String? = null
+        catatanMetode: String? = null,
+        jatuhTempoPiutang: Long? = null
     ): Result<Long> {
         if (items.isEmpty() || items.any { it.qty <= 0 }) {
             return Result.Failure(AppError.Lainnya("Keranjang kosong atau jumlah barang tidak valid."))
@@ -55,6 +59,20 @@ class TransactionRepository @Inject constructor(
 
         if (metode == MetodePembayaran.TUNAI && !PembayaranCalculator.cukup(jumlahDiterima, total)) {
             return Result.Failure(AppError.PembayaranKurang)
+        }
+
+        // Penjualan piutang ("bayar nanti"): pembeli wajib tercatat namanya, jumlahDiterima = uang muka
+        // (boleh 0), dan sisanya menjadi catatan piutang. Dicek sebelum menyentuh database.
+        val untukPiutang = metode == MetodePembayaran.HUTANG
+        val pelakuPiutang = namaPembeli?.trim().orEmpty()
+        val sisaPiutang = if (untukPiutang) total - jumlahDiterima else 0.0
+        if (untukPiutang) {
+            if (pelakuPiutang.isBlank()) {
+                return Result.Failure(AppError.Lainnya("Nama pembeli wajib diisi untuk penjualan piutang."))
+            }
+            HutangPiutangLogic.validasiUangMuka(jumlahDiterima, total)?.let {
+                return Result.Failure(AppError.Lainnya(it))
+            }
         }
 
         // Validasi stok sebelum masuk transaction block (fail fast, pesan jelas per produk)
@@ -82,6 +100,7 @@ class TransactionRepository @Inject constructor(
                         subtotal = subtotal,
                         diskon = diskonTotal,
                         total = total,
+                        hutangSisa = sisaPiutang,
                         status = TransactionStatus.COMPLETED
                     )
                 )
@@ -100,12 +119,31 @@ class TransactionRepository @Inject constructor(
                 transactionDao.insertItems(itemEntities)
 
                 val kembalian = if (metode == MetodePembayaran.TUNAI) PembayaranCalculator.hitungKembalian(jumlahDiterima, total) else 0.0
+                // Catatan piutang dibuat di transaksi database yang SAMA dengan penjualannya.
+                val piutangId: Long? = if (untukPiutang) {
+                    hutangPiutangDao.insert(
+                        HutangPiutangEntity(
+                            jenis = HutangPiutangLogic.JENIS_PIUTANG,
+                            pelaku = pelakuPiutang,
+                            nomorReferensi = noTransaksi,
+                            jumlah = sisaPiutang,
+                            sisa = sisaPiutang,
+                            status = HutangPiutangLogic.STATUS_AKTIF,
+                            tanggalTransaksi = sekarang,
+                            tanggalJatuhTempo = jatuhTempoPiutang,
+                            keterangan = if (jumlahDiterima > 0) "Uang muka ${jumlahDiterima.toLong()}" else null,
+                            createdAt = sekarang,
+                            updatedAt = sekarang
+                        )
+                    )
+                } else null
                 transactionDao.insertPayment(
                     PaymentEntity(
                         transactionId = trxId,
                         metode = metode,
                         jumlahDiterima = jumlahDiterima,
                         kembalian = kembalian,
+                        hutangPiutangId = piutangId,
                         catatanMetode = catatanMetode?.trim()?.ifBlank { null }
                     )
                 )
@@ -149,6 +187,16 @@ class TransactionRepository @Inject constructor(
                     return@withTransaction Result.Failure(AppError.Lainnya("Transaksi ini sudah dibatalkan sebelumnya."))
                 }
 
+                // Transaksi piutang yang sudah dicicil tidak boleh dibatalkan begitu saja: uang cicilan
+                // sudah diterima, jadi pembatalan harus ditangani manual (mis. kembalikan uang dulu).
+                val pembayaranAsal = transactionDao.getPayment(transactionId)
+                val piutangId = pembayaranAsal?.takeIf { it.metode == MetodePembayaran.HUTANG }?.hutangPiutangId
+                if (piutangId != null && hutangPiutangDao.countPembayaran(piutangId) > 0) {
+                    return@withTransaction Result.Failure(
+                        AppError.Lainnya("Transaksi piutang ini sudah dicicil, jadi tidak bisa dibatalkan. Selesaikan dulu pengembalian cicilannya.")
+                    )
+                }
+
                 val items = transactionDao.getItems(transactionId)
                 val waktuBatal = System.currentTimeMillis()
                 items.forEach { item ->
@@ -165,6 +213,10 @@ class TransactionRepository @Inject constructor(
                     )
                 }
                 transactionDao.updateStatus(transactionId, TransactionStatus.CANCELLED)
+                if (piutangId != null) {
+                    hutangPiutangDao.updateStatusAndSisa(piutangId, 0.0, HutangPiutangLogic.STATUS_BATAL, waktuBatal)
+                    transactionDao.updateHutangSisa(transactionId, 0.0)
+                }
                 auditLogDao.insert(
                     AuditLogEntity(
                         userId = trx.userId,

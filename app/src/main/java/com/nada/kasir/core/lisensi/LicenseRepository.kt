@@ -74,6 +74,15 @@ class LicenseRepository @Inject constructor(
             return Result.Failure(AppError.Lainnya("Kode ini sudah kadaluarsa."))
         }
 
+        // Kode trial tidak boleh menimpa paket yang masih aktif (lisensi berbayar akan hilang setelah trial habis).
+        val paketTersimpan = settingDao.get(KEY_PAKET_AKTIF)?.let { nama -> PaketAplikasi.values().firstOrNull { it.name == nama } }
+        val kadaluarsaTersimpan = settingDao.get(KEY_LISENSI_KADALUARSA)?.toLongOrNull()
+        if (!AturanAktivasiTrial.boleh(hasil, paketTersimpan, kadaluarsaTersimpan, sekarangEfektif)) {
+            return Result.Failure(
+                AppError.Lainnya("Anda sudah punya paket aktif. Kode trial hanya bisa dipakai saat aplikasi di paket Basic.")
+            )
+        }
+
         paketRepository.setPaketAktif(hasil.tier)
         settingDao.upsert(SettingEntity(KEY_LISENSI_KODE, kode.trim().uppercase()))
         settingDao.upsert(SettingEntity(KEY_LISENSI_KADALUARSA, (hasil.kadaluarsaMillis ?: -1L).toString()))

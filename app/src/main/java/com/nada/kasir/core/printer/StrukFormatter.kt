@@ -86,14 +86,22 @@ object StrukFormatter {
         builder.baris2Kolom("TOTAL", CurrencyFormatter.format(transaction.total), lebar)
         builder.bold(false)
         payment?.let {
-            val labelMetode = if (it.metode == MetodePembayaran.LAINNYA && !it.catatanMetode.isNullOrBlank()) {
-                it.catatanMetode
+            if (it.metode == MetodePembayaran.HUTANG) {
+                // Piutang (bayar nanti): tampilkan uang muka (jika ada) dan sisa yang harus dilunasi.
+                if (it.jumlahDiterima > 0) {
+                    builder.baris2Kolom("UANG MUKA", CurrencyFormatter.format(it.jumlahDiterima), lebar)
+                }
+                builder.baris2Kolom("SISA PIUTANG", CurrencyFormatter.format(transaction.hutangSisa), lebar)
             } else {
-                it.metode.name
-            }
-            builder.baris2Kolom(labelMetode, CurrencyFormatter.format(it.jumlahDiterima), lebar)
-            if (it.kembalian > 0) {
-                builder.baris2Kolom("KEMBALI", CurrencyFormatter.format(it.kembalian), lebar)
+                val labelMetode = if (it.metode == MetodePembayaran.LAINNYA && !it.catatanMetode.isNullOrBlank()) {
+                    it.catatanMetode
+                } else {
+                    it.metode.name
+                }
+                builder.baris2Kolom(labelMetode, CurrencyFormatter.format(it.jumlahDiterima), lebar)
+                if (it.kembalian > 0) {
+                    builder.baris2Kolom("KEMBALI", CurrencyFormatter.format(it.kembalian), lebar)
+                }
             }
         }
         builder.garis(lebar)
@@ -173,13 +181,18 @@ object StrukFormatter {
         }
         kiriKanan("TOTAL", CurrencyFormatter.format(transaction.total))
         payment?.let {
-            val labelMetode = if (it.metode == MetodePembayaran.LAINNYA && !it.catatanMetode.isNullOrBlank()) {
-                it.catatanMetode
+            if (it.metode == MetodePembayaran.HUTANG) {
+                if (it.jumlahDiterima > 0) kiriKanan("UANG MUKA", CurrencyFormatter.format(it.jumlahDiterima))
+                kiriKanan("SISA PIUTANG", CurrencyFormatter.format(transaction.hutangSisa))
             } else {
-                it.metode.name
+                val labelMetode = if (it.metode == MetodePembayaran.LAINNYA && !it.catatanMetode.isNullOrBlank()) {
+                    it.catatanMetode
+                } else {
+                    it.metode.name
+                }
+                kiriKanan(labelMetode, CurrencyFormatter.format(it.jumlahDiterima))
+                if (it.kembalian > 0) kiriKanan("KEMBALI", CurrencyFormatter.format(it.kembalian))
             }
-            kiriKanan(labelMetode, CurrencyFormatter.format(it.jumlahDiterima))
-            if (it.kembalian > 0) kiriKanan("KEMBALI", CurrencyFormatter.format(it.kembalian))
         }
         garis()
 

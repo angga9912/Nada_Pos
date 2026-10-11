@@ -25,11 +25,11 @@ object KontakSupport {
     }
 
     /**
-     * Minta kode aktivasi TRIAL (bukan beli langsung). Durasi "14 hari" di teks pesan
-     * ini cuma label buat penjual - kode trial-nya sendiri di-generate manual lewat
-     * workflow "Generate Kode Lisensi", jadi durasi sebenarnya ditentukan penjual saat
-     * generate, tidak dipaksa dari sini. Ganti angkanya di sini kalau kebijakan durasi
-     * trial berubah.
+     * Minta kode aktivasi TRIAL (bukan beli langsung). Bila bot WhatsApp trial (folder
+     * whatsapp-trial-bot/) aktif, pesan ini dibalas otomatis: bot membaca paket (Custom/Pro) dan
+     * ID Perangkat dari teks pesan. Durasi sebenarnya ditentukan server (TRIAL_DAYS, bawaan 14 hari)
+     * dan aplikasi menolak kode trial yang lebih dari ~16 hari. Jaga agar teks "paket ..." dan blok
+     * ID Perangkat di bawah tetap berformat sama, karena bot mengandalkannya.
      */
     fun bukaWhatsAppTrial(context: Context, paketTujuan: PaketAplikasi, idPerangkat: String? = null) {
         val pesan = "Halo, saya ingin coba TRIAL 14 hari Nada POS paket ${paketTujuan.label}. Boleh minta kode aktivasi trial-nya?" +

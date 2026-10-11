@@ -220,4 +220,80 @@ class LicenseKeyValidatorTest {
         assertNull(validasiUntuk(kode.replace("20260101", "20991231"), perangkatA))
         assertNull(validasiUntuk(kode.replaceFirst("NADA-PRO-", "NADA-CUSTOM-"), perangkatA))
     }
+
+    // ---- Kode trial otomatis (kunci terpisah, terikat perangkat, umur pendek) ----
+
+    private val pasanganTrial = buatPasangan()
+    private val kunciPublikTrial: String = Base64.getEncoder().encodeToString(pasanganTrial.public.encoded)
+    private val idHp = "A1B2C3D4E5F6"
+    private val sekarang: Long = java.time.LocalDate.of(2026, 10, 7)
+        .atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+
+    private fun kodeTrial(tier: String = "PRO", expiry: String = "20261014", id: String? = idHp) =
+        buatKode(tier, expiry, kunci = pasanganTrial, idPerangkat = id)
+
+    private fun validasiTrial(kode: String, id: String? = idHp, kunci: String = kunciPublikTrial) =
+        LicenseKeyValidator.validasiTrial(kode, kunci, id, sekarang)
+
+    @Test
+    fun `kode trial 7 hari untuk perangkat ini diterima dan ditandai trial`() {
+        val hasil = validasiTrial(kodeTrial())
+        assertNotNull(hasil)
+        assertEquals(PaketAplikasi.PRO, hasil!!.tier)
+        assertEquals(true, hasil.trial)
+        assertEquals(true, hasil.terikatPerangkat)
+    }
+
+    @Test
+    fun `kode trial 14 hari tetap diterima walau jam HP tertinggal satu hari`() {
+        // Server membuat expiry = hari ini + 14 (berlaku sampai akhir hari UTC itu).
+        val kode = kodeTrial(tier = "CUSTOM", expiry = "20261021")
+        assertNotNull(validasiTrial(kode))
+        val satuHariMundur = LicenseKeyValidator.validasiTrial(kode, kunciPublikTrial, idHp, sekarang - 24L * 60 * 60 * 1000)
+        assertNotNull(satuHariMundur)
+        // Tetapi jam yang tertinggal jauh (3 hari) tidak diberi toleransi.
+        assertNull(LicenseKeyValidator.validasiTrial(kode, kunciPublikTrial, idHp, sekarang - 3L * 24 * 60 * 60 * 1000))
+    }
+
+    @Test
+    fun `kode trial untuk perangkat lain ditolak`() {
+        assertNull(validasiTrial(kodeTrial(id = "FFFFFFFFFFFF")))
+    }
+
+    @Test
+    fun `kode trial lifetime ditolak`() {
+        assertNull(validasiTrial(kodeTrial(expiry = "LIFETIME")))
+    }
+
+    @Test
+    fun `kode trial yang berlaku terlalu lama ditolak walau tanda tangannya benar`() {
+        // Seandainya kunci trial bocor: kode 1 tahun tetap tidak diterima aplikasi.
+        assertNull(validasiTrial(kodeTrial(expiry = "20271007")))
+        assertNull(validasiTrial(kodeTrial(expiry = "20261101")))
+    }
+
+    @Test
+    fun `kode trial tanpa ikatan perangkat (V1) ditolak`() {
+        assertNull(validasiTrial(kodeTrial(id = null)))
+    }
+
+    @Test
+    fun `kode trial ditandatangani kunci lisensi utama tidak diterima sebagai trial`() {
+        // Kunci trial dan kunci utama saling terpisah: kode dari satu kunci tidak lolos di kunci lain.
+        val kodeDariKunciUtama = buatKode("PRO", "20261014", kunci = pasangan, idPerangkat = idHp)
+        assertNull(validasiTrial(kodeDariKunciUtama))
+        assertNull(LicenseKeyValidator.validasi(kodeTrial(), kunciPublik, idHp, izinkanTanpaPerangkat = false))
+    }
+
+    @Test
+    fun `kunci trial kosong menonaktifkan trial`() {
+        assertNull(validasiTrial(kodeTrial(), kunci = ""))
+    }
+
+    @Test
+    fun `kode trial yang sudah lewat masih terbaca valid agar bisa dinilai kadaluarsa oleh repository`() {
+        // Penolakan "kadaluarsa" dilakukan LicenseRepository; validator hanya membatasi umur ke DEPAN.
+        val hasil = validasiTrial(kodeTrial(expiry = "20260101"))
+        assertNotNull(hasil)
+    }
 }

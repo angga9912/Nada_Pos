@@ -223,6 +223,17 @@ object EntityJsonMapper {
         createdAt = o.optLong("createdAt", 0L), updatedAt = o.optLong("updatedAt", 0L)
     )
 
+    fun hutangPiutangPembayaranToJson(p: HutangPiutangPembayaranEntity) = JSONObject().apply {
+        put("id", p.id); put("hutangPiutangId", p.hutangPiutangId); put("jumlah", p.jumlah)
+        put("tanggal", p.tanggal); put("catatan", p.catatan ?: JSONObject.NULL)
+        put("userId", p.userId ?: JSONObject.NULL); put("createdAt", p.createdAt)
+    }
+    fun hutangPiutangPembayaranFromJson(o: JSONObject) = HutangPiutangPembayaranEntity(
+        id = o.optLong("id", 0L), hutangPiutangId = o.getLong("hutangPiutangId"), jumlah = o.getDouble("jumlah"),
+        tanggal = o.getLong("tanggal"), catatan = if (o.isNull("catatan")) null else o.optString("catatan"),
+        userId = optLongOrNull(o, "userId"), createdAt = o.optLong("createdAt", 0L)
+    )
+
     fun purchaseToJson(p: PurchaseEntity) = JSONObject().apply {
         put("id", p.id); put("noPembelian", p.noPembelian); put("supplierId", p.supplierId)
         put("outletId", p.outletId ?: JSONObject.NULL); put("tanggalPembelian", p.tanggalPembelian)

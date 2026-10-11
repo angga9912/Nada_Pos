@@ -299,10 +299,11 @@ fun KasirScreen(
         PembayaranDialog(
             total = state.total,
             namaPembeliAwal = namaPembeliDicatat,
+            izinkanPiutang = state.piutangTersedia,
             onDismiss = { showPembayaranDialog = false },
-            onKonfirmasi = { metode, jumlahDiterima, namaPembeli, catatanMetode ->
+            onKonfirmasi = { metode, jumlahDiterima, namaPembeli, catatanMetode, jatuhTempoHari ->
                 showPembayaranDialog = false
-                viewModel.bayar(currentUserId, metode, jumlahDiterima, namaPembeli, catatanMetode)
+                viewModel.bayar(currentUserId, metode, jumlahDiterima, namaPembeli, catatanMetode, jatuhTempoHari)
             }
         )
     }
@@ -1101,8 +1102,9 @@ private fun PelangganDialog(
 private fun PembayaranDialog(
     total: Double,
     namaPembeliAwal: String = "",
+    izinkanPiutang: Boolean = false,
     onDismiss: () -> Unit,
-    onKonfirmasi: (MetodePembayaran, Double, String?, String?) -> Unit
+    onKonfirmasi: (MetodePembayaran, Double, String?, String?, Int?) -> Unit
 ) {
     var metode by remember { mutableStateOf(MetodePembayaran.TUNAI) }
     var uangDiterimaText by remember { mutableStateOf("") }
@@ -1110,6 +1112,10 @@ private fun PembayaranDialog(
     // tetap bisa diubah manual di sini seperti sebelumnya.
     var namaPembeli by remember { mutableStateOf(namaPembeliAwal) }
     var catatanMetodeLainnya by remember { mutableStateOf("") }
+    // Khusus metode Piutang (bayar nanti): uang muka opsional + pilihan jatuh tempo.
+    var uangMukaText by remember { mutableStateOf("") }
+    var jatuhTempoHari by remember { mutableStateOf<Int?>(null) }
+    val uangMuka = uangMukaText.toDoubleOrNull() ?: 0.0
     val uangDiterima = uangDiterimaText.toDoubleOrNull() ?: 0.0
     val kembalian = uangDiterima - total
 
@@ -1117,7 +1123,12 @@ private fun PembayaranDialog(
     // Kredit disembunyikan dari kasir, tapi enum-nya tetap utuh supaya transaksi lama dengan
     // metode itu tetap bisa dibaca). Kalau pembeli bayar dengan cara lain, kasir pilih
     // "Lainnya" dan tulis manual nama metodenya (mis. "Transfer BCA").
-    val metodeDitampilkan = listOf(MetodePembayaran.TUNAI, MetodePembayaran.QRIS, MetodePembayaran.LAINNYA)
+    // Piutang hanya muncul untuk paket yang mencakup Hutang/Piutang (Pro).
+    val metodeDitampilkan = buildList {
+        add(MetodePembayaran.TUNAI); add(MetodePembayaran.QRIS)
+        if (izinkanPiutang) add(MetodePembayaran.HUTANG)
+        add(MetodePembayaran.LAINNYA)
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1129,7 +1140,7 @@ private fun PembayaranDialog(
                 OutlinedTextField(
                     value = namaPembeli,
                     onValueChange = { namaPembeli = it },
-                    label = { Text("Nama Pembeli (opsional)") },
+                    label = { Text(if (metode == MetodePembayaran.HUTANG) "Nama Pembeli (wajib untuk piutang)" else "Nama Pembeli (opsional)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1137,7 +1148,13 @@ private fun PembayaranDialog(
                 metodeDitampilkan.forEach { m ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = metode == m, onClick = { metode = m })
-                        Text(if (m == MetodePembayaran.LAINNYA) "Lainnya" else m.name)
+                        Text(
+                            when (m) {
+                                MetodePembayaran.LAINNYA -> "Lainnya"
+                                MetodePembayaran.HUTANG -> "Piutang (bayar nanti)"
+                                else -> m.name
+                            }
+                        )
                     }
                 }
                 if (metode == MetodePembayaran.LAINNYA) {
@@ -1148,6 +1165,28 @@ private fun PembayaranDialog(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+                }
+                if (metode == MetodePembayaran.HUTANG) {
+                    OutlinedTextField(
+                        value = uangMukaText,
+                        onValueChange = { uangMukaText = it.filter { c -> c.isDigit() } },
+                        label = { Text("Uang muka (opsional)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Sisa piutang: ${CurrencyFormatter.format((total - uangMuka).coerceAtLeast(0.0))}",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text("Jatuh tempo", style = MaterialTheme.typography.labelMedium)
+                    listOf<Pair<Int?, String>>(null to "Tanpa jatuh tempo", 7 to "7 hari", 14 to "14 hari", 30 to "30 hari").forEach { (hari, label) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = jatuhTempoHari == hari, onClick = { jatuhTempoHari = hari })
+                            Text(label)
+                        }
+                    }
                 }
                 if (metode == MetodePembayaran.TUNAI) {
                     Spacer(Modifier.height(4.dp))
@@ -1167,12 +1206,21 @@ private fun PembayaranDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    val jumlah = if (metode == MetodePembayaran.TUNAI) uangDiterima else total
+                    val jumlah = when (metode) {
+                        MetodePembayaran.TUNAI -> uangDiterima
+                        MetodePembayaran.HUTANG -> uangMuka // uang muka; sisanya jadi piutang
+                        else -> total
+                    }
                     val catatan = if (metode == MetodePembayaran.LAINNYA) catatanMetodeLainnya.ifBlank { null } else null
-                    onKonfirmasi(metode, jumlah, namaPembeli.ifBlank { null }, catatan)
+                    onKonfirmasi(
+                        metode, jumlah, namaPembeli.ifBlank { null }, catatan,
+                        if (metode == MetodePembayaran.HUTANG) jatuhTempoHari else null
+                    )
                 },
                 enabled = (metode != MetodePembayaran.TUNAI || uangDiterima > 0.0) &&
-                    (metode != MetodePembayaran.LAINNYA || catatanMetodeLainnya.isNotBlank())
+                    (metode != MetodePembayaran.LAINNYA || catatanMetodeLainnya.isNotBlank()) &&
+                    (metode != MetodePembayaran.HUTANG ||
+                        (namaPembeli.isNotBlank() && uangMuka < total))
             ) { Text("Konfirmasi") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }

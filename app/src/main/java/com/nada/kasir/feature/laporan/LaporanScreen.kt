@@ -935,7 +935,7 @@ private fun LaporanDetailView(laporan: LaporanPeriode?) {
             Spacer(Modifier.height(6.dp))
             laporan.ringkasanMetodePembayaran.forEach { item ->
                 BarisInfoLaporan(
-                    label = item.metode,
+                    label = com.nada.kasir.core.util.labelMetodePembayaran(item.metode),
                     nilai = "${item.jumlahTransaksi}x • ${CurrencyFormatter.format(item.total)}"
                 )
             }

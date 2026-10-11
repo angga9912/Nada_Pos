@@ -22,6 +22,15 @@ val licensePublicKey: String = if (licensePublicFile.exists()) {
     ""
 }
 
+// === Kunci PUBLIK trial (opsional) ===
+// Kode trial otomatis lewat WhatsApp (folder whatsapp-trial-bot/) ditandatangani kunci TERPISAH dari
+// kunci lisensi utama, supaya kebocoran server bot tidak bisa dipakai membuat lisensi permanen.
+// Aplikasi hanya menerima kode dari kunci ini bila terikat perangkat dan masa berlakunya pendek
+// (lihat LicenseKeyValidator.validasiTrial). File kosong/tidak ada = fitur trial otomatis nonaktif.
+// Buat sekali: python3 tools/generate_license.py --init --private-file license.trial.private --public-file license.trial.public
+val trialPublicFile = rootProject.file("license.trial.public")
+val trialPublicKey: String = if (trialPublicFile.exists()) trialPublicFile.readText().trim() else ""
+
 // === Signing config untuk release build (poin perbaikan #2 - sebelumnya release tidak ditandatangani) ===
 // Dibaca dari "keystore.properties" di root project (di-gitignore, tidak pernah dicommit).
 // Lihat keystore.properties.example + tools/generate_keystore.sh untuk cara membuat keystore-nya.
@@ -53,6 +62,7 @@ android {
         versionName = appVersionName
 
         buildConfigField("String", "LICENSE_PUBLIC_KEY", "\"$licensePublicKey\"")
+        buildConfigField("String", "TRIAL_LICENSE_PUBLIC_KEY", "\"$trialPublicKey\"")
     }
 
     // Product flavors = titik kustomisasi per pelanggan (poin 21).

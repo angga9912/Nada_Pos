@@ -72,4 +72,27 @@ class StrukFormatterPreviewTest {
         val teks = StrukFormatter.buatStrukPreviewText(store, transaksi, items, payment) // namaPembeli null
         assertFalse(teks.contains("Pembeli:"))
     }
+
+    @Test
+    fun `struk piutang menampilkan uang muka dan sisa piutang, bukan kembalian`() {
+        val trxPiutang = transaksi.copy(hutangSisa = 9000.0)
+        val bayarPiutang = PaymentEntity(
+            transactionId = 1, metode = MetodePembayaran.HUTANG, jumlahDiterima = 4000.0, kembalian = 0.0, hutangPiutangId = 3L
+        )
+        val teks = StrukFormatter.buatStrukPreviewText(store, trxPiutang, items, bayarPiutang)
+        assertTrue(teks.contains("UANG MUKA"))
+        assertTrue(teks.contains("SISA PIUTANG"))
+        assertFalse(teks.contains("KEMBALI"))
+    }
+
+    @Test
+    fun `struk piutang tanpa uang muka tidak menampilkan baris uang muka`() {
+        val trxPiutang = transaksi.copy(hutangSisa = 13000.0)
+        val bayarPiutang = PaymentEntity(
+            transactionId = 1, metode = MetodePembayaran.HUTANG, jumlahDiterima = 0.0, kembalian = 0.0, hutangPiutangId = 3L
+        )
+        val teks = StrukFormatter.buatStrukPreviewText(store, trxPiutang, items, bayarPiutang)
+        assertFalse(teks.contains("UANG MUKA"))
+        assertTrue(teks.contains("SISA PIUTANG"))
+    }
 }

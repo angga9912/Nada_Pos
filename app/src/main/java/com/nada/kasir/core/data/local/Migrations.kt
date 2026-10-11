@@ -147,3 +147,29 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
         )
     }
 }
+
+/**
+ * v5 -> v6: Phase 5 tahap 1 - tabel riwayat pembayaran/cicilan hutang & piutang.
+ * Nama indeks WAJIB "index_<tabel>_<kolom>" supaya cocok dengan yang dibuat Room dari entity.
+ */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS hutang_piutang_pembayaran (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                hutangPiutangId INTEGER NOT NULL,
+                jumlah REAL NOT NULL,
+                tanggal INTEGER NOT NULL,
+                catatan TEXT,
+                userId INTEGER,
+                createdAt INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_hutang_piutang_pembayaran_hutangPiutangId " +
+                "ON hutang_piutang_pembayaran (hutangPiutangId)"
+        )
+    }
+}

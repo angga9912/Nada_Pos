@@ -27,9 +27,10 @@ import com.nada.kasir.core.data.local.entity.*
         SupplierEntity::class,
         HutangPiutangEntity::class,
         PurchaseEntity::class,
-        PurchaseItemEntity::class
+        PurchaseItemEntity::class,
+        HutangPiutangPembayaranEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

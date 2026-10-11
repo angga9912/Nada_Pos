@@ -1,6 +1,7 @@
 package com.nada.kasir.core.backup
 
 import com.nada.kasir.core.data.local.entity.HutangPiutangEntity
+import com.nada.kasir.core.data.local.entity.HutangPiutangPembayaranEntity
 import com.nada.kasir.core.data.local.entity.MetodePembayaran
 import com.nada.kasir.core.data.local.entity.OutletEntity
 import com.nada.kasir.core.data.local.entity.PaymentEntity
@@ -163,5 +164,19 @@ class EntityJsonMapperTest {
 
         assertEquals(pembelian, EntityJsonMapper.purchaseFromJson(EntityJsonMapper.purchaseToJson(pembelian)))
         assertEquals(item, EntityJsonMapper.purchaseItemFromJson(EntityJsonMapper.purchaseItemToJson(item)))
+    }
+
+    @Test
+    fun `riwayat pembayaran hutang piutang bisa di-roundtrip`() {
+        val asli = HutangPiutangPembayaranEntity(
+            id = 12, hutangPiutangId = 8, jumlah = 25000.0, tanggal = 1700000000000L,
+            catatan = "cicilan ke-1", userId = 2L, createdAt = 1700000000001L
+        )
+        assertEquals(asli, EntityJsonMapper.hutangPiutangPembayaranFromJson(EntityJsonMapper.hutangPiutangPembayaranToJson(asli)))
+        val tanpaOpsional = asli.copy(catatan = null, userId = null)
+        assertEquals(
+            tanpaOpsional,
+            EntityJsonMapper.hutangPiutangPembayaranFromJson(EntityJsonMapper.hutangPiutangPembayaranToJson(tanpaOpsional))
+        )
     }
 }
