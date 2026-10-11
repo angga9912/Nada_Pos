@@ -38,6 +38,7 @@ import com.nada.kasir.feature.pengaturan_printer.PengaturanPrinterScreen
 import com.nada.kasir.feature.pengaturan_toko.PengaturanTokoScreen
 import com.nada.kasir.feature.produk.ProdukScreen
 import com.nada.kasir.feature.riwayat.RiwayatScreen
+import com.nada.kasir.feature.stok.StokScreen
 import com.nada.kasir.feature.supplier.SupplierScreen
 
 sealed class NadaRoute(val route: String) {
@@ -51,6 +52,7 @@ sealed class NadaRoute(val route: String) {
     object Pengguna : NadaRoute("pengguna")
     object Supplier : NadaRoute("supplier")
     object Pembelian : NadaRoute("pembelian")
+    object Stok : NadaRoute("stok")
     object Outlet : NadaRoute("outlet")
     object HutangPiutang : NadaRoute("hutang_piutang")
     object InfoPaket : NadaRoute("info_paket")
@@ -134,6 +136,10 @@ fun NadaNavGraph(navController: NavHostController = rememberNavController()) {
             AdminRouteGuard(sessionManager, navController) {
                 PaketRouteGuard(paketAktif, FiturPaket.SUPPLIER, navController) { SupplierScreen() }
             }
+        }
+        composable(NadaRoute.Stok.route) {
+            // Stok masuk/keluar/opname tersedia di semua paket (hanya Admin): fitur inventaris dasar.
+            AdminRouteGuard(sessionManager, navController) { StokScreen() }
         }
         composable(NadaRoute.Pembelian.route) {
             AdminRouteGuard(sessionManager, navController) {
@@ -262,6 +268,7 @@ private fun MainShell(
                 onBukaPengaturanToko = { navController.navigate(NadaRoute.PengaturanToko.route) },
                 onBukaPengguna = { navController.navigate(NadaRoute.Pengguna.route) },
                 onBukaSupplier = { navController.navigate(NadaRoute.Supplier.route) },
+                onBukaStok = { navController.navigate(NadaRoute.Stok.route) },
                 onBukaPembelian = { navController.navigate(NadaRoute.Pembelian.route) },
                 onBukaOutlet = { navController.navigate(NadaRoute.Outlet.route) },
                 onBukaHutangPiutang = { navController.navigate(NadaRoute.HutangPiutang.route) },

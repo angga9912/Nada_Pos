@@ -34,6 +34,7 @@ fun PengaturanHubScreen(
     onBukaPengaturanPrinter: () -> Unit,
     onBukaPengaturanToko: () -> Unit,
     onBukaPengguna: () -> Unit,
+    onBukaStok: () -> Unit,
     onBukaSupplier: () -> Unit,
     onBukaPembelian: () -> Unit,
     onBukaOutlet: () -> Unit,
@@ -50,6 +51,7 @@ fun PengaturanHubScreen(
     val itemAdmin = buildList {
         add(ItemPengaturan("Pengaturan Printer", "Kelola printer thermal Bluetooth", Icons.Filled.Print, onBukaPengaturanPrinter))
         add(ItemPengaturan("Pengaturan Toko", "Identitas toko, struk, dan warna aplikasi", Icons.Filled.Storefront, onBukaPengaturanToko))
+        add(ItemPengaturan("Stok", "Stok masuk, stok keluar, dan opname", Icons.Filled.Inventory, onBukaStok))
         if (paketAktif.mengizinkan(FiturPaket.SUPPLIER)) {
             add(ItemPengaturan("Supplier", "Kelola pemasok / vendor", Icons.Filled.LocalShipping, onBukaSupplier))
         }

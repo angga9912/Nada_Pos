@@ -21,6 +21,8 @@ class ProductRepository @Inject constructor(
 ) {
     fun observeActive(): Flow<List<ProductEntity>> = productDao.observeActiveProducts()
 
+    fun observeNamaSemua(): Flow<List<com.nada.kasir.core.data.local.dao.NamaProduk>> = productDao.observeNamaSemua()
+
     fun search(query: String): Flow<List<ProductEntity>> = productDao.search(query)
 
     /** Filter gabungan kategori (chip) + pencarian teks untuk layar Kasir. */

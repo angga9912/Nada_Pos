@@ -251,8 +251,8 @@ build APK terpisah per paket.
   ke atas; Manajemen Pengguna khusus **Pro**. Data yang sudah dibuat tidak dihapus bila paket
   turun ke Basic — datanya tetap ada, hanya layarnya terkunci sampai paket naik lagi.
 - ✅ **Pembelian ke Supplier** juga khusus **Pro** (menu Lainnya → Pembelian).
-- ⚠️ Modul Phase 5 dikerjakan bertahap (lihat bagian Phase 5 di bawah). Layar stok masuk/keluar dan
-  pelabelan cabang (`outletId`) belum selesai.
+- ✅ Layar **Stok** (Lainnya → Stok) tersedia di **semua paket** untuk Admin, karena ini fitur inventaris dasar.
+- ⚠️ Modul Phase 5 dikerjakan bertahap (lihat bagian Phase 5 di bawah). Pelabelan cabang (`outletId`) belum selesai.
 
 
 
@@ -541,7 +541,18 @@ di ZIP ini, jadi tidak perlu setup tambahan.
    lagi lewat mutasi `KELUAR`. Layar **Supplier** kini punya pencarian, edit, nonaktifkan/aktifkan, nama
    unik, serta detail berisi jumlah pembelian, hutang berjalan, dan 10 pembelian terakhir. Tidak ada
    perubahan skema database pada tahap ini.
-3. 🔜 **Layar stok masuk/keluar/penyesuaian.**
+3. ✅ **Layar Stok (masuk, keluar, opname).** Menu Lainnya → Stok (Admin, semua paket):
+   - **Stok Masuk** manual (stok tambahan, hadiah, retur pelanggan) dengan harga beli opsional dan saklar
+     "Perbarui harga beli produk". Belanja dari supplier tetap dicatat lewat menu Pembelian (Pro).
+   - **Stok Keluar** dengan alasan (rusak, kadaluarsa, hilang, dipakai sendiri, retur ke supplier, lainnya;
+     "Lainnya" wajib dicatat). Ditolak bila melebihi stok sistem.
+   - **Opname:** isi stok hasil hitung fisik, selisih ditampilkan sebelum disimpan lalu dicatat sebagai mutasi
+     (naik = MASUK, turun = KELUAR, sama seperti konvensi stok di seluruh aplikasi).
+   - Riwayat mutasi dengan filter Manual / Semua / Masuk / Keluar (200 terbaru) dan nama produk yang tetap
+     tampil walau produknya sudah dihapus.
+   - Perbaikan `StockRepository`: jumlah <= 0 dan di atas 1.000.000 ditolak, produk dihapus ditolak, parameter
+     `hargaBeli` yang dulu diabaikan kini dipakai, dan semua pengecekan dilakukan sebelum penulisan pertama.
+     Tidak ada perubahan skema database.
 4. 🔜 **Pelabelan cabang:** outlet aktif memberi label `outletId` pada transaksi, pembelian, dan mutasi
    stok; laporan bisa difilter per cabang; stok produk tetap satu pool.
 

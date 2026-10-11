@@ -89,6 +89,11 @@ interface ProductDao {
     @Query("SELECT id, hargaBeli FROM products")
     suspend fun getSemuaHargaBeli(): List<HargaBeliProduk>
 
+    /** Nama semua produk (termasuk yang sudah dihapus) agar riwayat mutasi lama tetap bisa menampilkan namanya. */
+    @Query("SELECT id, nama FROM products")
+    fun observeNamaSemua(): Flow<List<NamaProduk>>
 }
 
 data class HargaBeliProduk(val id: Long, val hargaBeli: Double)
+
+data class NamaProduk(val id: Long, val nama: String)
