@@ -32,4 +32,11 @@ class FiturPaketTest {
         assertEquals("Pro", FiturPaket.SUPPLIER.labelPaketTersedia)
         assertEquals("Custom dan Pro", FiturPaket.BACKUP.labelPaketTersedia)
     }
+
+    @Test
+    fun `logo toko hanya untuk custom dan pro`() {
+        assertFalse(PaketAplikasi.BASIC.mengizinkan(FiturPaket.LOGO_TOKO))
+        assertTrue(PaketAplikasi.CUSTOM.mengizinkan(FiturPaket.LOGO_TOKO))
+        assertTrue(PaketAplikasi.PRO.mengizinkan(FiturPaket.LOGO_TOKO))
+    }
 }

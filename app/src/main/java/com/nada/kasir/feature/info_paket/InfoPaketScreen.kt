@@ -31,7 +31,7 @@ private val daftarFitur = listOf(
     BarisFitur("Kasir & Transaksi", basic = true, custom = true, pro = true),
     BarisFitur("Produk & Stok", basic = true, custom = true, pro = true),
     BarisFitur("Cetak Struk Bluetooth", basic = true, custom = true, pro = true),
-    BarisFitur("Custom Branding Toko", basic = false, custom = true, pro = true),
+    BarisFitur("Custom Branding (logo & warna)", basic = false, custom = true, pro = true),
     BarisFitur("Laporan Harian & Bulanan", basic = false, custom = true, pro = true),
     BarisFitur("Export ke Excel", basic = false, custom = true, pro = true),
     BarisFitur("Backup & Restore Data", basic = false, custom = true, pro = true),

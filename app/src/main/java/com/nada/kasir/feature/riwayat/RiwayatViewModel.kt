@@ -7,6 +7,8 @@ import com.nada.kasir.core.data.repository.PrinterRepository
 import com.nada.kasir.core.data.repository.StoreRepository
 import com.nada.kasir.core.data.repository.TransactionRepository
 import com.nada.kasir.core.printer.BluetoothPrinterManager
+import com.nada.kasir.core.paket.PaketRepository
+import com.nada.kasir.core.paket.sesuaiPaket
 import com.nada.kasir.core.printer.StrukFormatter
 import com.nada.kasir.core.session.SessionManager
 import com.nada.kasir.core.util.Result
@@ -29,7 +31,8 @@ class RiwayatViewModel @Inject constructor(
     private val storeRepository: StoreRepository,
     private val printerRepository: PrinterRepository,
     private val bluetoothPrinterManager: BluetoothPrinterManager,
-    private val sessionManager: SessionManager
+    private val sessionManager: SessionManager,
+    private val paketRepository: PaketRepository
 ) : ViewModel() {
 
     private val queryFlow = MutableStateFlow("")
@@ -103,7 +106,7 @@ class RiwayatViewModel @Inject constructor(
             val (transaksi, items, payment) = transactionRepository.getDetail(transactionId)
             if (transaksi == null) { onError("Transaksi tidak ditemukan."); return@launch }
             transaksiIdPreviewFlow.value = transactionId
-            previewStrukFlow.value = StrukFormatter.buatStrukPreviewText(store, transaksi, items, payment)
+            previewStrukFlow.value = StrukFormatter.buatStrukPreviewText(store.sesuaiPaket(paketRepository.observePaketAktif().first()), transaksi, items, payment)
         }
     }
 
@@ -132,7 +135,7 @@ class RiwayatViewModel @Inject constructor(
                 onError("Transaksi tidak ditemukan.")
                 return@launch
             }
-            val struk = StrukFormatter.buatStruk(store, transaksi, items, payment)
+            val struk = StrukFormatter.buatStruk(store.sesuaiPaket(paketRepository.observePaketAktif().first()), transaksi, items, payment)
             val result = bluetoothPrinterManager.cetak(printerDefault.macAddress, struk)
             sedangMencetakFlow.value = false
             tutupPreviewStruk()

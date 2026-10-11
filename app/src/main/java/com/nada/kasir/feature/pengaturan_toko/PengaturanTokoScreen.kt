@@ -25,6 +25,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.nada.kasir.branding.ThemeConfig
 import com.nada.kasir.core.data.local.entity.StoreEntity
+import com.nada.kasir.core.paket.FiturPaket
+import com.nada.kasir.core.paket.mengizinkan
 import com.nada.kasir.core.paket.PaketAplikasi
 import java.io.File
 
@@ -71,14 +73,29 @@ fun PengaturanTokoScreen(viewModel: PengaturanTokoViewModel = hiltViewModel()) {
         Text("Pengaturan Toko", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(16.dp))
 
-        // Logo Toko (poin 1 & 2) - dipakai di header Dashboard dan struk.
-        LogoTokoSection(
-            logoPath = storeDb?.logoPath,
-            onLogoDipilih = { uri ->
-                val current = storeDb ?: StoreEntity()
-                viewModel.gantiLogo(context, uri, current)
+        // Logo Toko (poin 1 & 2) - dipakai di header Dashboard dan struk. Khusus paket Custom ke atas
+        // (bagian "Custom Branding Toko"); paket Basic melihat kartu terkunci.
+        val logoTersedia = statusLisensi.paket.mengizinkan(FiturPaket.LOGO_TOKO)
+        if (logoTersedia) {
+            LogoTokoSection(
+                logoPath = storeDb?.logoPath,
+                onLogoDipilih = { uri ->
+                    val current = storeDb ?: StoreEntity()
+                    viewModel.gantiLogo(context, uri, current)
+                }
+            )
+        } else {
+            Text("Logo Toko", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "Logo toko di header aplikasi dan struk tersedia di paket Custom & Pro. " +
+                        "Struk tetap mencetak nama toko Anda.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(12.dp)
+                )
             }
-        )
+        }
         Spacer(Modifier.height(20.dp))
         Divider()
         Spacer(Modifier.height(16.dp))
@@ -213,7 +230,9 @@ fun PengaturanTokoScreen(viewModel: PengaturanTokoViewModel = hiltViewModel()) {
 
         Spacer(Modifier.height(16.dp))
         Text("Pengaturan Struk", style = MaterialTheme.typography.titleMedium)
-        BarisToggle("Tampilkan Logo di Struk", tampilkanLogo) { tampilkanLogo = it }
+        if (logoTersedia) {
+            BarisToggle("Tampilkan Logo di Struk", tampilkanLogo) { tampilkanLogo = it }
+        }
         BarisToggle("Tampilkan Alamat di Struk", tampilkanAlamat) { tampilkanAlamat = it }
         BarisToggle("Tampilkan WhatsApp di Struk", tampilkanWa) { tampilkanWa = it }
         BarisToggle("Tampilkan Diskon di Struk", tampilkanDiskon) { tampilkanDiskon = it }

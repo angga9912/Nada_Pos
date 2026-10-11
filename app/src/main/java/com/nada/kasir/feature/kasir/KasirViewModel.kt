@@ -16,6 +16,7 @@ import com.nada.kasir.core.domain.model.KeranjangItem
 import com.nada.kasir.core.paket.FiturPaket
 import com.nada.kasir.core.paket.PaketAplikasi
 import com.nada.kasir.core.paket.mengizinkan
+import com.nada.kasir.core.paket.sesuaiPaket
 import com.nada.kasir.core.paket.PaketRepository
 import com.nada.kasir.core.printer.BluetoothPrinterManager
 import com.nada.kasir.core.printer.StrukFormatter
@@ -315,7 +316,7 @@ class KasirViewModel @Inject constructor(
                 errorFlow.value = AppError.TransaksiGagalDisimpan.pesan
                 return@launch
             }
-            previewStrukFlow.value = StrukFormatter.buatStrukPreviewText(store, transaksi, items, payment)
+            previewStrukFlow.value = StrukFormatter.buatStrukPreviewText(store.sesuaiPaket(uiState.value.paketAktif), transaksi, items, payment)
         }
     }
 
@@ -335,7 +336,7 @@ class KasirViewModel @Inject constructor(
                 errorFlow.value = AppError.TransaksiGagalDisimpan.pesan
                 return@launch
             }
-            onSelesai(StrukFormatter.buatStrukPreviewText(store, transaksi, items, payment))
+            onSelesai(StrukFormatter.buatStrukPreviewText(store.sesuaiPaket(uiState.value.paketAktif), transaksi, items, payment))
         }
     }
 
@@ -358,7 +359,7 @@ class KasirViewModel @Inject constructor(
                 errorFlow.value = AppError.TransaksiGagalDisimpan.pesan
                 return@launch
             }
-            val strukBytes = StrukFormatter.buatStruk(store, transaksi, items, payment)
+            val strukBytes = StrukFormatter.buatStruk(store.sesuaiPaket(uiState.value.paketAktif), transaksi, items, payment)
             val result = bluetoothPrinterManager.cetak(printerDefault.macAddress, strukBytes)
             sedangMencetakFlow.value = false
             previewStrukFlow.value = null

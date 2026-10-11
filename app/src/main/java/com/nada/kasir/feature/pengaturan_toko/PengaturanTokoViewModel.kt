@@ -8,7 +8,9 @@ import com.nada.kasir.core.data.local.entity.StoreEntity
 import com.nada.kasir.core.data.repository.StoreRepository
 import com.nada.kasir.core.lisensi.LicenseRepository
 import com.nada.kasir.core.lisensi.StatusLisensi
+import com.nada.kasir.core.paket.FiturPaket
 import com.nada.kasir.core.paket.PaketAplikasi
+import com.nada.kasir.core.paket.mengizinkan
 import com.nada.kasir.core.util.LogoStorageHelper
 import com.nada.kasir.core.util.Result
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -46,6 +48,8 @@ class PengaturanTokoViewModel @Inject constructor(
 
     /** Ganti logo toko (poin 1 & 2). Logo disalin ke storage internal agar path-nya stabil. */
     fun gantiLogo(context: Context, uri: Uri, storeSaatIni: StoreEntity) {
+        // Penjaga kedua selain UI: logo toko khusus paket Custom ke atas.
+        if (!statusLisensi.value.paket.mengizinkan(FiturPaket.LOGO_TOKO)) return
         viewModelScope.launch {
             val path = LogoStorageHelper.simpanLogoDariUri(context, uri)
             if (path != null) {

@@ -178,7 +178,7 @@ Perbaikan:
 - ✅ Nama aplikasi diganti dari "NADA KASIR CUSTOM" menjadi **"NADA POS"** di
   semua tempat (label launcher, halaman Login, fallback header Dashboard, test
   print). Package name (`com.nada.kasir`) TIDAK diubah — cuma nama tampilan.
-- ✅ **Upload Logo Toko** — di Pengaturan Toko, tombol "Unggah Logo" membuka
+- ✅ **Upload Logo Toko (khusus Custom ke atas)** — di Pengaturan Toko, tombol "Unggah Logo" membuka
   pemilih gambar (galeri), logo disalin ke storage internal aplikasi
   (`LogoStorageHelper`) supaya path-nya stabil.
 - ✅ Logo asli sekarang tampil di **header Dashboard** (bulat, menggantikan
@@ -230,6 +230,7 @@ build APK terpisah per paket.
 | Import/Export Excel | ❌ | ✅ | ✅ |
 | Laporan (Harian/Bulanan/Stok) | ❌ | ✅ | ✅ |
 | Backup & Restore Data | ❌ | ✅ | ✅ |
+| Logo Toko (header aplikasi & struk) | ❌ | ✅ | ✅ |
 | Manajemen Pengguna (Multi User Admin/Kasir) | ❌ | ❌ | ✅ |
 | Supplier | ❌ | ❌ | ✅ |
 | Outlet / Cabang | ❌ | ❌ | ✅ |
@@ -251,6 +252,12 @@ build APK terpisah per paket.
   ke atas; Manajemen Pengguna khusus **Pro**. Data yang sudah dibuat tidak dihapus bila paket
   turun ke Basic — datanya tetap ada, hanya layarnya terkunci sampai paket naik lagi.
 - ✅ **Pembelian ke Supplier** juga khusus **Pro** (menu Lainnya → Pembelian).
+- ✅ **Logo toko** (unggah, tampil di header dan dicetak di struk) bagian dari *Custom Branding* bersama warna
+  aplikasi, jadi **khusus Custom dan Pro** (`FiturPaket.LOGO_TOKO`). Paket Basic melihat kartu terkunci di
+  Pengaturan Toko dan struknya mencetak nama toko biasa. Data logo tidak dihapus saat paket turun; ia hanya
+  tidak ditampilkan dan tidak dicetak (`StoreEntity.sesuaiPaket`), sehingga muncul lagi setelah upgrade atau
+  trial. Aturan ini dipakai di struk cetak, preview struk, cetak ulang di Riwayat, dan header Dashboard, serta
+  dijaga ulang di `PengaturanTokoViewModel.gantiLogo`.
 - ✅ Layar **Stok** (Lainnya → Stok) tersedia di **semua paket** untuk Admin, karena ini fitur inventaris dasar.
 - ⚠️ Modul Phase 5 dikerjakan bertahap (lihat bagian Phase 5 di bawah). Pelabelan cabang (`outletId`) belum selesai.
 

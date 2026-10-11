@@ -1,5 +1,6 @@
 package com.nada.kasir.feature.dashboard
 
+import com.nada.kasir.core.paket.sesuaiPaket
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -62,7 +63,7 @@ fun DashboardScreen(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
-        item { HeaderDashboard(namaToko = state.store?.nama ?: "NADA POS", logoPath = state.store?.logoPath, namaPengguna = namaPengguna, onLogout = onLogout) }
+        item { HeaderDashboard(namaToko = state.store?.nama ?: "NADA POS", logoPath = state.store?.sesuaiPaket(state.paketAktif)?.logoPath, namaPengguna = namaPengguna, onLogout = onLogout) }
         item { Spacer(Modifier.height(4.dp)) }
         if (isPro) {
             item { WalletCardPro(state = state, onLihatLaporan = onBukaLaporan) }
