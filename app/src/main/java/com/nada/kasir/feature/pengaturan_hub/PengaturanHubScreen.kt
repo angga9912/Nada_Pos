@@ -35,6 +35,7 @@ fun PengaturanHubScreen(
     onBukaPengaturanToko: () -> Unit,
     onBukaPengguna: () -> Unit,
     onBukaSupplier: () -> Unit,
+    onBukaPembelian: () -> Unit,
     onBukaOutlet: () -> Unit,
     onBukaHutangPiutang: () -> Unit,
     onBukaBackup: () -> Unit,
@@ -51,6 +52,9 @@ fun PengaturanHubScreen(
         add(ItemPengaturan("Pengaturan Toko", "Identitas toko, struk, dan warna aplikasi", Icons.Filled.Storefront, onBukaPengaturanToko))
         if (paketAktif.mengizinkan(FiturPaket.SUPPLIER)) {
             add(ItemPengaturan("Supplier", "Kelola pemasok / vendor", Icons.Filled.LocalShipping, onBukaSupplier))
+        }
+        if (paketAktif.mengizinkan(FiturPaket.PEMBELIAN)) {
+            add(ItemPengaturan("Pembelian", "Catat belanja stok dari supplier", Icons.Filled.ShoppingCart, onBukaPembelian))
         }
         if (paketAktif.mengizinkan(FiturPaket.OUTLET)) {
             add(ItemPengaturan("Outlet / Cabang", "Kelola cabang dan lokasi", Icons.Filled.Store, onBukaOutlet))

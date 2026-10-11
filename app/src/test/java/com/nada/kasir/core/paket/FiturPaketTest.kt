@@ -8,7 +8,7 @@ import org.junit.Test
 class FiturPaketTest {
 
     private val fiturPro = listOf(
-        FiturPaket.SUPPLIER, FiturPaket.OUTLET, FiturPaket.HUTANG_PIUTANG, FiturPaket.PENGGUNA
+        FiturPaket.SUPPLIER, FiturPaket.PEMBELIAN, FiturPaket.OUTLET, FiturPaket.HUTANG_PIUTANG, FiturPaket.PENGGUNA
     )
 
     @Test

@@ -71,6 +71,10 @@ interface ProductDao {
     @Query("SELECT stok FROM products WHERE id = :productId")
     suspend fun getStok(productId: Long): Int
 
+    /** Dipakai penerimaan barang pembelian: harga beli terakhir dari supplier. */
+    @Query("UPDATE products SET hargaBeli = :hargaBeli WHERE id = :productId")
+    suspend fun updateHargaBeli(productId: Long, hargaBeli: Double)
+
     // === Untuk Backup/Restore & Import Excel (Phase 3) ===
     @Insert
     suspend fun insertAll(products: List<ProductEntity>): List<Long>

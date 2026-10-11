@@ -32,6 +32,7 @@ import com.nada.kasir.feature.login.LoginScreen
 import com.nada.kasir.feature.onboarding.OnboardingPreference
 import com.nada.kasir.feature.onboarding.OnboardingScreen
 import com.nada.kasir.feature.outlet.OutletScreen
+import com.nada.kasir.feature.pembelian.PembelianScreen
 import com.nada.kasir.feature.pengaturan_hub.PengaturanHubScreen
 import com.nada.kasir.feature.pengaturan_printer.PengaturanPrinterScreen
 import com.nada.kasir.feature.pengaturan_toko.PengaturanTokoScreen
@@ -49,6 +50,7 @@ sealed class NadaRoute(val route: String) {
     object PengaturanToko : NadaRoute("pengaturan_toko")
     object Pengguna : NadaRoute("pengguna")
     object Supplier : NadaRoute("supplier")
+    object Pembelian : NadaRoute("pembelian")
     object Outlet : NadaRoute("outlet")
     object HutangPiutang : NadaRoute("hutang_piutang")
     object InfoPaket : NadaRoute("info_paket")
@@ -131,6 +133,11 @@ fun NadaNavGraph(navController: NavHostController = rememberNavController()) {
         composable(NadaRoute.Supplier.route) {
             AdminRouteGuard(sessionManager, navController) {
                 PaketRouteGuard(paketAktif, FiturPaket.SUPPLIER, navController) { SupplierScreen() }
+            }
+        }
+        composable(NadaRoute.Pembelian.route) {
+            AdminRouteGuard(sessionManager, navController) {
+                PaketRouteGuard(paketAktif, FiturPaket.PEMBELIAN, navController) { PembelianScreen() }
             }
         }
         composable(NadaRoute.Outlet.route) {
@@ -255,6 +262,7 @@ private fun MainShell(
                 onBukaPengaturanToko = { navController.navigate(NadaRoute.PengaturanToko.route) },
                 onBukaPengguna = { navController.navigate(NadaRoute.Pengguna.route) },
                 onBukaSupplier = { navController.navigate(NadaRoute.Supplier.route) },
+                onBukaPembelian = { navController.navigate(NadaRoute.Pembelian.route) },
                 onBukaOutlet = { navController.navigate(NadaRoute.Outlet.route) },
                 onBukaHutangPiutang = { navController.navigate(NadaRoute.HutangPiutang.route) },
                 onBukaBackup = { navController.navigate(NadaRoute.Backup.route) },

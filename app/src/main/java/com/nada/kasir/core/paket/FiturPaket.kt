@@ -11,6 +11,7 @@ enum class FiturPaket(val nama: String, val paketMinimum: PaketAplikasi) {
     BACKUP("Backup & Restore Data", PaketAplikasi.CUSTOM),
     PENGGUNA("Manajemen Pengguna", PaketAplikasi.PRO),
     SUPPLIER("Supplier", PaketAplikasi.PRO),
+    PEMBELIAN("Pembelian ke Supplier", PaketAplikasi.PRO),
     OUTLET("Outlet / Cabang", PaketAplikasi.PRO),
     HUTANG_PIUTANG("Hutang / Piutang", PaketAplikasi.PRO);
 

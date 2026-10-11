@@ -37,6 +37,7 @@ private val daftarFitur = listOf(
     BarisFitur("Backup & Restore Data", basic = false, custom = true, pro = true),
     BarisFitur("Multi User (Admin & Kasir)", basic = false, custom = false, pro = true),
     BarisFitur("Supplier", basic = false, custom = false, pro = true),
+    BarisFitur("Pembelian ke Supplier", basic = false, custom = false, pro = true),
     BarisFitur("Outlet / Cabang", basic = false, custom = false, pro = true),
     BarisFitur("Hutang / Piutang", basic = false, custom = false, pro = true),
 )

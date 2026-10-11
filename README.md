@@ -105,6 +105,18 @@ sangat berniat masih bisa mem-patch APK agar selalu menganggap lisensi valid (bu
 membuat kode palsu). Obfuscation R8 (aktif di build release) mempersulit hal itu; untuk
 perlindungan penuh di skala besar, pertimbangkan validasi online ke server.
 
+### Trial otomatis lewat WhatsApp
+Folder `whatsapp-trial-bot/` berisi webhook (Vercel) yang membalas **kode trial** otomatis (paket Custom/Pro,
+14 hari) saat pembeli menekan tombol trial di aplikasi atau mengirim ID Perangkat ke nomor WhatsApp Nada POS. Panduan lengkap ada di `whatsapp-trial-bot/README.md`.
+
+- Kode trial ditandatangani **kunci trial terpisah** (`license.trial.public` di root repo, `license.trial.private`
+  hanya di server bot), jadi kebocoran server tidak bisa dipakai membuat lisensi berbayar.
+- Aplikasi hanya menerima kode trial yang **terikat ID Perangkat**, **bukan LIFETIME**, dan berlaku **paling
+  lama 16 hari** (`LicenseKeyValidator.validasiTrial`). Tanpa file `license.trial.public`, fitur ini nonaktif.
+- Kode trial **tidak boleh menimpa paket yang masih aktif** (`AturanAktivasiTrial`), supaya toko berlangganan
+  tidak turun ke Basic setelah mencoba trial.
+- Pembatasan di server: satu trial per ID Perangkat, 3 permintaan per nomor per 30 hari, 30 per hari.
+
 ### Signing APK Release (perbaikan poin 2)
 
 Sebelumnya build `release` tidak ditandatangani sama sekali (tidak bisa
@@ -238,8 +250,9 @@ build APK terpisah per paket.
 - ✅ Supplier, Outlet/Cabang, dan Hutang/Piutang khusus **Pro**; Backup & Restore untuk **Custom**
   ke atas; Manajemen Pengguna khusus **Pro**. Data yang sudah dibuat tidak dihapus bila paket
   turun ke Basic — datanya tetap ada, hanya layarnya terkunci sampai paket naik lagi.
-- ⚠️ Modul Phase 5 masih dasar: Hutang/Piutang baru mencatat piutang manual (belum terhubung ke
-  penjualan di Kasir), Pembelian belum punya layar, dan `outletId` belum terisi di transaksi.
+- ✅ **Pembelian ke Supplier** juga khusus **Pro** (menu Lainnya → Pembelian).
+- ⚠️ Modul Phase 5 dikerjakan bertahap (lihat bagian Phase 5 di bawah). Layar stok masuk/keluar dan
+  pelabelan cabang (`outletId`) belum selesai.
 
 
 
@@ -504,10 +517,39 @@ di ZIP ini, jadi tidak perlu setup tambahan.
 
 **Phase 4 (selesai)** — ~~Laporan~~, ~~User Admin/Kasir~~, ~~Custom Branding penuh~~.
 
-**Phase 5 (sebagian)** — Modul Supplier, Outlet/Cabang, dan Hutang/Piutang sudah ada sebagai layar
-dasar di `feature/` (khusus paket Pro) dan ikut Backup/Restore. Yang belum: pelunasan dan hutang
-(bukan hanya piutang), hubungan Hutang/Piutang dengan penjualan Kasir, layar Pembelian, dan
-pemakaian `outletId` pada transaksi.
+**Phase 5 (bertahap, khusus paket Pro)** — dikerjakan dalam 4 tahap:
+
+1. ✅ **Hutang/Piutang lengkap.** Layar punya tab Piutang dan Hutang, ringkasan total, penanda
+   jatuh tempo/terlambat, detail dengan riwayat pembayaran, **cicilan** sampai lunas, edit, dan
+   pembatalan catatan manual. Di **Kasir** ada metode **"Piutang (bayar nanti)"**: nama pembeli wajib,
+   uang muka opsional, dan jatuh tempo (7/14/30 hari). Catatan piutang dibuat atomik bersama
+   transaksinya, struk menampilkan uang muka dan sisa piutang, dan cicilan memperbarui
+   `transactions.hutangSisa`. Membatalkan transaksi piutang yang belum dicicil ikut membatalkan
+   piutangnya; yang sudah dicicil ditolak supaya uang cicilan tidak "menghilang".
+   Database naik ke **versi 6** (tabel `hutang_piutang_pembayaran`, migrasi `MIGRATION_5_6`), format
+   backup naik ke **versi 3**.
+2. ✅ **Pembelian ke supplier dan detail Supplier.** Menu **Pembelian** (Pro): pilih supplier aktif dan
+   barang (qty, harga beli, diskon baris, diskon supplier), bayar sekarang sebagian/penuh/belum sama
+   sekali. Sisa otomatis menjadi **hutang ke supplier** (muncul di tab Hutang pada Hutang/Piutang,
+   dengan jatuh tempo 7/14/30 hari) dan cicilannya memperbarui `purchases.hutangSisa`. Pembelian bisa
+   langsung **diterima** (stok bertambah, mutasi stok `MASUK` tercatat, harga beli produk diperbarui ke
+   harga setelah diskon baris) atau **dipesan dulu** lalu tombol *Terima Barang*. Semuanya atomik: pembelian,
+   item, stok, mutasi, dan catatan hutang tersimpan bersamaan atau tidak sama sekali; barang yang hilang/dihapus
+   membatalkan seluruh pembelian (tidak ada yang dilewati diam-diam). Nomor pembelian berurutan per hari
+   (`PUR-YYYYMMDD-0001`, menggantikan angka acak). **Batalkan pembelian** ditolak bila hutangnya sudah dicicil
+   atau stok sekarang lebih kecil dari yang diterima (sebagian sudah terjual); bila lolos, stok dikurangi
+   lagi lewat mutasi `KELUAR`. Layar **Supplier** kini punya pencarian, edit, nonaktifkan/aktifkan, nama
+   unik, serta detail berisi jumlah pembelian, hutang berjalan, dan 10 pembelian terakhir. Tidak ada
+   perubahan skema database pada tahap ini.
+3. 🔜 **Layar stok masuk/keluar/penyesuaian.**
+4. 🔜 **Pelabelan cabang:** outlet aktif memberi label `outletId` pada transaksi, pembelian, dan mutasi
+   stok; laporan bisa difilter per cabang; stok produk tetap satu pool.
+
+Catatan perilaku Hutang/Piutang: omzet di Laporan menghitung penjualan piutang penuh pada tanggal
+transaksinya (dasar akrual), bukan saat dibayar; metode ini tampil sebagai "Piutang (belum dibayar)" di
+ringkasan metode pembayaran. Piutang dibuat dari Kasir (**piutang pelanggan**), sedangkan hutang ke
+supplier dibuat otomatis dari menu Pembelian. Catatan yang terhubung ke transaksi/pembelian tidak bisa
+dibatalkan manual dari layar Hutang/Piutang; batalkan lewat Riwayat atau menu Pembelian.
 
 ## Struktur Folder
 

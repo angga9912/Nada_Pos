@@ -31,6 +31,15 @@ interface PurchaseDao {
     @Query("SELECT * FROM purchase_items WHERE purchaseId = :purchaseId")
     suspend fun getItems(purchaseId: Long): List<PurchaseItemEntity>
 
+    @Query("SELECT * FROM purchase_items WHERE purchaseId = :purchaseId")
+    fun observeItems(purchaseId: Long): Flow<List<PurchaseItemEntity>>
+
+    @Query("SELECT * FROM purchases WHERE noPembelian = :noPembelian LIMIT 1")
+    suspend fun findByNoPembelian(noPembelian: String): PurchaseEntity?
+
+    @Query("SELECT noPembelian FROM purchases WHERE noPembelian LIKE :awalan || '%' ORDER BY noPembelian DESC LIMIT 1")
+    suspend fun getLatestNoPembelian(awalan: String): String?
+
     @Update
     suspend fun updatePurchase(entity: PurchaseEntity)
 
