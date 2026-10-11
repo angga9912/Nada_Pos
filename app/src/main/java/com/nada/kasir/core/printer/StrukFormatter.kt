@@ -85,7 +85,7 @@ object StrukFormatter {
         builder.bold(true)
         builder.baris2Kolom("TOTAL", CurrencyFormatter.format(transaction.total), lebar)
         builder.bold(false)
-        payment?.let {
+        payment?.also {
             if (it.metode == MetodePembayaran.HUTANG) {
                 // Piutang (bayar nanti): tampilkan uang muka (jika ada) dan sisa yang harus dilunasi.
                 if (it.jumlahDiterima > 0) {
@@ -180,7 +180,7 @@ object StrukFormatter {
             kiriKanan("DISKON", CurrencyFormatter.format(transaction.diskon))
         }
         kiriKanan("TOTAL", CurrencyFormatter.format(transaction.total))
-        payment?.let {
+        payment?.also {
             if (it.metode == MetodePembayaran.HUTANG) {
                 if (it.jumlahDiterima > 0) kiriKanan("UANG MUKA", CurrencyFormatter.format(it.jumlahDiterima))
                 kiriKanan("SISA PIUTANG", CurrencyFormatter.format(transaction.hutangSisa))
