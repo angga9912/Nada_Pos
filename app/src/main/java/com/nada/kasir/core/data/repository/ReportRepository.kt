@@ -25,14 +25,15 @@ class ReportRepository @Inject constructor(
     private val transactionDao: TransactionDao,
     private val productDao: ProductDao
 ) {
-    suspend fun laporanPeriode(start: Long, end: Long, sertakanProdukTerlaris: Boolean = false): LaporanPeriode {
-        val items: List<TransactionItemEntity> = transactionDao.getItemsSelesaiDalamRentang(start, end)
+    /** @param outletId null = semua cabang; selain itu hanya transaksi berlabel cabang tersebut. */
+    suspend fun laporanPeriode(start: Long, end: Long, sertakanProdukTerlaris: Boolean = false, outletId: Long? = null): LaporanPeriode {
+        val items: List<TransactionItemEntity> = transactionDao.getItemsSelesaiDalamRentang(start, end, outletId)
         val hargaBeliMap = productDao.getSemuaHargaBeli().associate { it.id to it.hargaBeli }
-        val totalDiskon = transactionDao.getTotalDiskonDalamRentang(start, end) ?: 0.0
-        val ringkasanMetode = transactionDao.getRingkasanMetodePembayaran(start, end)
-        val jumlahTransaksi = transactionDao.getJumlahTransaksiDalamRentang(start, end)
-        val totalPenjualan = transactionDao.getTotalPenjualanDalamRentang(start, end)
-        val produkTerlaris = if (sertakanProdukTerlaris) transactionDao.getProdukTerlaris(start, end, 10) else emptyList()
+        val totalDiskon = transactionDao.getTotalDiskonDalamRentang(start, end, outletId) ?: 0.0
+        val ringkasanMetode = transactionDao.getRingkasanMetodePembayaran(start, end, outletId)
+        val jumlahTransaksi = transactionDao.getJumlahTransaksiDalamRentang(start, end, outletId)
+        val totalPenjualan = transactionDao.getTotalPenjualanDalamRentang(start, end, outletId)
+        val produkTerlaris = if (sertakanProdukTerlaris) transactionDao.getProdukTerlaris(start, end, 10, outletId) else emptyList()
 
         return LaporanPeriode(
             totalPenjualan = totalPenjualan,

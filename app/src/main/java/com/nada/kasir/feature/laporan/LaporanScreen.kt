@@ -2,6 +2,8 @@ package com.nada.kasir.feature.laporan
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -72,6 +74,16 @@ fun LaporanScreen(
                     currentUserName = state.currentUserName,
                     storeName = state.store?.nama ?: "Warung Sederhana"
                 )
+            }
+
+            if (state.daftarOutlet.isNotEmpty()) {
+                item {
+                    FilterCabangRow(
+                        daftar = state.daftarOutlet,
+                        terpilih = state.outletFilterId,
+                        onPilih = viewModel::pilihCabang
+                    )
+                }
             }
 
             item { Spacer(Modifier.height(14.dp)) }
@@ -1071,5 +1083,42 @@ private fun formatSaldoCompact(amount: Double): String {
         else -> {
             CurrencyFormatter.format(amount)
         }
+    }
+}
+
+
+/**
+ * Filter cabang untuk seluruh angka Laporan (hanya muncul di paket yang mencakup Outlet). "Semua cabang" menjumlahkan
+ * semua transaksi, termasuk yang dibuat tanpa label cabang. Stok tetap satu pool sehingga tab Stok tidak terfilter.
+ */
+@Composable
+private fun FilterCabangRow(daftar: List<com.nada.kasir.core.data.local.entity.OutletEntity>, terpilih: Long?, onPilih: (Long?) -> Unit) {
+    Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+        Text("Cabang", style = MaterialTheme.typography.labelMedium, color = Color(0xFF64748B))
+        Spacer(Modifier.height(6.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ChipCabang("Semua cabang", terpilih == null) { onPilih(null) }
+            daftar.forEach { o -> ChipCabang(o.nama, terpilih == o.id) { onPilih(o.id) } }
+        }
+    }
+}
+
+@Composable
+private fun ChipCabang(label: String, terpilih: Boolean, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = if (terpilih) Color(0xFF2563EB) else Color.White,
+        border = if (terpilih) null else androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1)),
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Text(
+            label,
+            color = if (terpilih) Color.White else Color(0xFF0F172A),
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+        )
     }
 }

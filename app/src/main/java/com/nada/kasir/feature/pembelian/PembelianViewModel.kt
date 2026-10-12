@@ -95,7 +95,8 @@ data class PembelianUiState(
 class PembelianViewModel @Inject constructor(
     private val repository: PurchaseRepository,
     private val supplierRepository: SupplierRepository,
-    private val productRepository: ProductRepository
+    private val productRepository: ProductRepository,
+    private val outletRepository: com.nada.kasir.core.data.repository.OutletRepository
 ) : ViewModel() {
 
     private val filterFlow = MutableStateFlow(FilterPembelian.SEMUA)
@@ -190,7 +191,8 @@ class PembelianViewModel @Inject constructor(
                 jatuhTempo = if (form.sisaHutang() > 0.0) jatuhTempo else null,
                 terimaSekarang = form.terimaSekarang,
                 perbaruiHargaBeli = form.perbaruiHargaBeli,
-                keterangan = form.keterangan.ifBlank { null }
+                keterangan = form.keterangan.ifBlank { null },
+                outletId = outletRepository.idAktifEfektif()
             )
             when (val hasil = repository.simpanPembelian(input)) {
                 is Result.Success -> {

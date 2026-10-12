@@ -259,7 +259,7 @@ build APK terpisah per paket.
   trial. Aturan ini dipakai di struk cetak, preview struk, cetak ulang di Riwayat, dan header Dashboard, serta
   dijaga ulang di `PengaturanTokoViewModel.gantiLogo`.
 - ✅ Layar **Stok** (Lainnya → Stok) tersedia di **semua paket** untuk Admin, karena ini fitur inventaris dasar.
-- ⚠️ Modul Phase 5 dikerjakan bertahap (lihat bagian Phase 5 di bawah). Pelabelan cabang (`outletId`) belum selesai.
+- ✅ **Pelabelan cabang** (Outlet, khusus **Pro**): lihat Phase 5 tahap 4 di bawah.
 
 
 
@@ -560,8 +560,19 @@ di ZIP ini, jadi tidak perlu setup tambahan.
    - Perbaikan `StockRepository`: jumlah <= 0 dan di atas 1.000.000 ditolak, produk dihapus ditolak, parameter
      `hargaBeli` yang dulu diabaikan kini dipakai, dan semua pengecekan dilakukan sebelum penulisan pertama.
      Tidak ada perubahan skema database.
-4. 🔜 **Pelabelan cabang:** outlet aktif memberi label `outletId` pada transaksi, pembelian, dan mutasi
-   stok; laporan bisa difilter per cabang; stok produk tetap satu pool.
+4. ✅ **Pelabelan cabang (opsi A).** Di Lainnya → Outlet / Cabang (Pro) pilih **cabang aktif** untuk HP/kasir ini
+   (atau "Tanpa cabang"). Sejak itu transaksi Kasir, pembelian, dan perubahan stok manual (masuk, keluar, opname)
+   diberi label `outletId` cabang itu. Pembatalan transaksi memakai cabang transaksi asalnya, bukan cabang aktif
+   saat dibatalkan. Dialog Pembayaran menampilkan "Cabang: …" supaya kasir tahu label yang dipakai.
+   - **Laporan** punya filter cabang (Semua cabang / per cabang) yang mempengaruhi omzet semua waktu, laporan
+     harian/7 hari/bulanan, estimasi keuntungan, metode bayar, dan produk terlaris. Ekspor Excel mengikuti filter
+     dan menambahkan kode cabang pada nama file. "Semua cabang" menjumlahkan semua transaksi, termasuk yang
+     dibuat tanpa label. Tab Stok tidak terfilter karena stok produk tetap **satu pool** untuk semua cabang.
+   - Layar **Outlet** kini punya edit (nama dan kode wajib serta unik tanpa membedakan huruf besar/kecil), alamat,
+     telepon, dan saklar aktif/nonaktif. Outlet nonaktif otomatis berhenti dipakai sebagai label.
+   - Label hanya dipakai selama paket mencakup Outlet. Pilihan cabang aktif disimpan di setting `outlet_aktif_id`
+     dan ikut Backup/Restore (id outlet dipertahankan). Tidak ada perubahan skema database pada tahap ini.
+   - Belum ada: nama cabang di struk, filter cabang di Riwayat, dan stok terpisah per cabang (opsi B).
 
 Catatan perilaku Hutang/Piutang: omzet di Laporan menghitung penjualan piutang penuh pada tanggal
 transaksinya (dasar akrual), bukan saat dibayar; metode ini tampil sebagai "Piutang (belum dibayar)" di

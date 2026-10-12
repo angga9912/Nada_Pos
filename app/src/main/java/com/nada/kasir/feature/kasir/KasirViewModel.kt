@@ -67,6 +67,7 @@ data class KasirUiState(
 
 @HiltViewModel
 class KasirViewModel @Inject constructor(
+    private val outletRepository: com.nada.kasir.core.data.repository.OutletRepository,
     private val productRepository: ProductRepository,
     private val categoryRepository: CategoryRepository,
     private val transactionRepository: TransactionRepository,
@@ -94,6 +95,11 @@ class KasirViewModel @Inject constructor(
     private val produkTerfilterFlow: Flow<List<ProductEntity>> =
         combine(queryFlow, kategoriTerpilihFlow) { query, categoryId -> query.trim() to categoryId }
             .flatMapLatest { (query, categoryId) -> productRepository.observeFiltered(categoryId, query) }
+
+    /** Cabang aktif (label transaksi baru); null = tanpa cabang atau fitur Outlet tidak ada di paket. */
+    val outletAktif: StateFlow<com.nada.kasir.core.data.local.entity.OutletEntity?> =
+        outletRepository.observeOutletAktifEfektif()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val uiState: StateFlow<KasirUiState> = combine(
         produkTerfilterFlow,
@@ -279,7 +285,8 @@ class KasirViewModel @Inject constructor(
                 jumlahDiterima = jumlahDiterima,
                 namaPembeli = namaPembeli,
                 catatanMetode = catatanMetode,
-                jatuhTempoPiutang = HutangPiutangLogic.jatuhTempoDariHari(jatuhTempoHari, System.currentTimeMillis())
+                jatuhTempoPiutang = HutangPiutangLogic.jatuhTempoDariHari(jatuhTempoHari, System.currentTimeMillis()),
+                outletId = outletRepository.idAktifEfektif()
             )
             prosesBayarFlow.value = false
             when (result) {

@@ -25,7 +25,8 @@ import javax.inject.Singleton
 class StockRepository @Inject constructor(
     private val appDatabase: AppDatabase,
     private val productDao: ProductDao,
-    private val stockMovementDao: StockMovementDao
+    private val stockMovementDao: StockMovementDao,
+    private val outletRepository: OutletRepository
 ) {
     fun observeRiwayat(): Flow<List<StockMovementEntity>> = stockMovementDao.observeAll()
 
@@ -45,6 +46,7 @@ class StockRepository @Inject constructor(
     ): Result<Unit> {
         StokLogic.validasiQty(qty)?.let { return Result.Failure(AppError.Lainnya(it)) }
         StokLogic.validasiHargaBeli(hargaBeli)?.let { return Result.Failure(AppError.Lainnya(it)) }
+        val outletId = outletRepository.idAktifEfektif()
         return try {
             appDatabase.withTransaction<Result<Unit>> {
                 val produk = productDao.findById(productId)
@@ -58,6 +60,7 @@ class StockRepository @Inject constructor(
                         tipe = TipeMutasiStok.MASUK,
                         qty = qty,
                         supplierId = supplierId,
+                        outletId = outletId,
                         keterangan = keterangan,
                         tanggalWaktu = System.currentTimeMillis()
                     )
@@ -80,6 +83,7 @@ class StockRepository @Inject constructor(
         izinkanMinus: Boolean = false
     ): Result<Unit> {
         StokLogic.validasiQty(qty)?.let { return Result.Failure(AppError.Lainnya(it)) }
+        val outletId = outletRepository.idAktifEfektif()
         return try {
             appDatabase.withTransaction<Result<Unit>> {
                 val produk = productDao.findById(productId)
@@ -98,6 +102,7 @@ class StockRepository @Inject constructor(
                         productId = productId,
                         tipe = TipeMutasiStok.KELUAR,
                         qty = qty,
+                        outletId = outletId,
                         keterangan = keterangan,
                         tanggalWaktu = System.currentTimeMillis()
                     )
@@ -116,6 +121,7 @@ class StockRepository @Inject constructor(
      * @return selisih yang diterapkan (positif = bertambah, negatif = berkurang).
      */
     suspend fun opname(productId: Long, stokFisik: Int, keterangan: String?): Result<Int> {
+        val outletId = outletRepository.idAktifEfektif()
         return try {
             appDatabase.withTransaction<Result<Int>> {
                 val produk = productDao.findById(productId)
@@ -129,7 +135,7 @@ class StockRepository @Inject constructor(
                 val selisih = StokLogic.selisihOpname(stokSistem, stokFisik)
                 if (selisih > 0) productDao.increaseStock(productId, selisih) else productDao.decreaseStock(productId, -selisih)
                 MutasiStokManual.buat(productId, stokSistem, stokFisik, keterangan ?: StokLogic.keteranganOpname(null), System.currentTimeMillis())
-                    ?.let { stockMovementDao.insert(it) }
+                    ?.let { stockMovementDao.insert(it.copy(outletId = outletId)) }
                 Result.Success(selisih)
             }
         } catch (e: Exception) {

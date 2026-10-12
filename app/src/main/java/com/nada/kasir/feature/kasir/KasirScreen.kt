@@ -59,6 +59,7 @@ fun KasirScreen(
     viewModel: KasirViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val outletAktif by viewModel.outletAktif.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     var showPembayaranDialog by remember { mutableStateOf(false) }
     var showBarcodeScanner by remember { mutableStateOf(false) }
@@ -300,6 +301,7 @@ fun KasirScreen(
             total = state.total,
             namaPembeliAwal = namaPembeliDicatat,
             izinkanPiutang = state.piutangTersedia,
+            namaCabang = outletAktif?.nama,
             onDismiss = { showPembayaranDialog = false },
             onKonfirmasi = { metode, jumlahDiterima, namaPembeli, catatanMetode, jatuhTempoHari ->
                 showPembayaranDialog = false
@@ -1103,6 +1105,7 @@ private fun PembayaranDialog(
     total: Double,
     namaPembeliAwal: String = "",
     izinkanPiutang: Boolean = false,
+    namaCabang: String? = null,
     onDismiss: () -> Unit,
     onKonfirmasi: (MetodePembayaran, Double, String?, String?, Int?) -> Unit
 ) {
@@ -1136,6 +1139,9 @@ private fun PembayaranDialog(
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Text("Total: ${CurrencyFormatter.format(total)}", style = MaterialTheme.typography.titleMedium)
+                if (namaCabang != null) {
+                    Text("Cabang: $namaCabang", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = namaPembeli,

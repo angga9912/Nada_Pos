@@ -46,7 +46,8 @@ class TransactionRepository @Inject constructor(
         jumlahDiterima: Double,
         namaPembeli: String? = null,
         catatanMetode: String? = null,
-        jatuhTempoPiutang: Long? = null
+        jatuhTempoPiutang: Long? = null,
+        outletId: Long? = null
     ): Result<Long> {
         if (items.isEmpty() || items.any { it.qty <= 0 }) {
             return Result.Failure(AppError.Lainnya("Keranjang kosong atau jumlah barang tidak valid."))
@@ -101,6 +102,7 @@ class TransactionRepository @Inject constructor(
                         diskon = diskonTotal,
                         total = total,
                         hutangSisa = sisaPiutang,
+                        outletId = outletId,
                         status = TransactionStatus.COMPLETED
                     )
                 )
@@ -157,6 +159,7 @@ class TransactionRepository @Inject constructor(
                             tipe = TipeMutasiStok.KELUAR,
                             qty = item.qty,
                             referensiTransaksiId = trxId,
+                            outletId = outletId,
                             tanggalWaktu = sekarang,
                             keterangan = "Penjualan Kasir No: $noTransaksi"
                         )
@@ -207,6 +210,7 @@ class TransactionRepository @Inject constructor(
                             tipe = TipeMutasiStok.MASUK,
                             qty = item.qty,
                             referensiTransaksiId = transactionId,
+                            outletId = trx.outletId, // pembatalan memakai cabang transaksi asalnya
                             tanggalWaktu = waktuBatal,
                             keterangan = "Pembatalan Transaksi ${trx.noTransaksi}"
                         )
@@ -260,6 +264,8 @@ class TransactionRepository @Inject constructor(
     fun observeTotalQtyTerjual(startMillis: Long, endMillis: Long): Flow<Int> =
         transactionDao.observeTotalQtyTerjual(startMillis, endMillis)
 
-    suspend fun getProdukPopuler(start: Long, end: Long, limit: Int = 5) =
-        transactionDao.getProdukTerlaris(start, end, limit)
+    suspend fun getProdukPopuler(start: Long, end: Long, limit: Int = 5, outletId: Long? = null) =
+        transactionDao.getProdukTerlaris(start, end, limit, outletId)
+
+    suspend fun getTotalOmzetSemuaWaktu(outletId: Long?): Double = transactionDao.getTotalOmzetSemuaWaktu(outletId)
 }
