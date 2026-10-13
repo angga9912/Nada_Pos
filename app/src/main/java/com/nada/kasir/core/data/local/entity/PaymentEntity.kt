@@ -1,11 +1,17 @@
 package com.nada.kasir.core.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 enum class MetodePembayaran { TUNAI, QRIS, TRANSFER, DEBIT, KREDIT, HUTANG, LAINNYA }
 
-@Entity(tableName = "payments")
+@Entity(
+    tableName = "payments",
+    indices = [
+        Index(value = ["transactionId"])
+    ]
+)
 data class PaymentEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val transactionId: Long,

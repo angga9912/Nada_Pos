@@ -1,11 +1,18 @@
 package com.nada.kasir.core.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 enum class PurchaseStatus { PENDING, RECEIVED, CANCELLED }
 
-@Entity(tableName = "purchases")
+@Entity(
+    tableName = "purchases",
+    indices = [
+        Index(value = ["supplierId"]),
+        Index(value = ["noPembelian"])
+    ]
+)
 data class PurchaseEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val noPembelian: String, // format: PUR-YYYYMMDD-XXXX

@@ -30,8 +30,10 @@ import com.nada.kasir.core.data.local.entity.*
         PurchaseItemEntity::class,
         HutangPiutangPembayaranEntity::class
     ],
-    version = 6,
-    exportSchema = false
+    version = 7,
+    // Skema diekspor ke app/schemas/ (lihat ksp { arg(...) } di build.gradle.kts) agar bisa diuji (MigrasiIndeksTest)
+    // dan menjadi dasar tes migrasi berikutnya.
+    exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {

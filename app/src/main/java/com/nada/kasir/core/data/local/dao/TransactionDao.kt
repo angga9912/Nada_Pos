@@ -29,8 +29,9 @@ interface TransactionDao {
         WHERE (:query = '' OR noTransaksi LIKE '%' || :query || '%' OR (namaPembeli IS NOT NULL AND namaPembeli LIKE '%' || :query || '%'))
         AND tanggalWaktu BETWEEN :startMillis AND :endMillis
         ORDER BY tanggalWaktu DESC
+        LIMIT :limit
     """)
-    fun observeRiwayat(query: String, startMillis: Long, endMillis: Long): Flow<List<TransactionEntity>>
+    fun observeRiwayat(query: String, startMillis: Long, endMillis: Long, limit: Int): Flow<List<TransactionEntity>>
 
     @Query("SELECT * FROM transactions WHERE id = :id")
     suspend fun findById(id: Long): TransactionEntity?

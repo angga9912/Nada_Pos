@@ -43,6 +43,10 @@ interface ProductDao {
     @Query("SELECT COUNT(*) FROM products WHERE kodeProduk = :kodeProduk")
     suspend fun countByKodeProduk(kodeProduk: String): Int
 
+    /** Kode produk bentrok hanya dengan produk AKTIF lain (produk terhapus boleh kodenya dipakai ulang). */
+    @Query("SELECT COUNT(*) FROM products WHERE kodeProduk = :kodeProduk AND id != :excludeId AND deletedAt IS NULL")
+    suspend fun countByKodeProdukExcludingId(kodeProduk: String, excludeId: Long): Int
+
     @Query("SELECT COUNT(*) FROM products WHERE barcode = :barcode AND id != :excludeId AND deletedAt IS NULL")
     suspend fun countByBarcodeExcludingId(barcode: String, excludeId: Long): Int
 

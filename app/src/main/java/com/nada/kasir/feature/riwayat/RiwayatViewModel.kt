@@ -48,9 +48,13 @@ class RiwayatViewModel @Inject constructor(
     val previewStruk: StateFlow<String?> = previewStrukFlow
     val sedangMencetak: StateFlow<Boolean> = sedangMencetakFlow
 
-    val riwayat: StateFlow<List<TransactionEntity>> = combine(queryFlow, filterRentangFlow) { q, filter ->
-        Pair(q, filter)
-    }.flatMapLatest { (q, filter) ->
+    private val batasFlow = MutableStateFlow(UKURAN_HALAMAN)
+    /** Jumlah baris maksimum yang dimuat saat ini; bertambah tiap "Muat lebih banyak". */
+    val batas: StateFlow<Int> = batasFlow
+
+    val riwayat: StateFlow<List<TransactionEntity>> = combine(queryFlow, filterRentangFlow, batasFlow) { q, filter, batas ->
+        Triple(q, filter, batas)
+    }.flatMapLatest { (q, filter, batas) ->
         val now = System.currentTimeMillis()
         val (start, end) = when (filter) {
             FilterRentangRiwayat.HARI_INI -> {
@@ -79,12 +83,15 @@ class RiwayatViewModel @Inject constructor(
                 Pair(0L, Long.MAX_VALUE)
             }
         }
-        transactionRepository.observeRiwayat(q.trim(), start, end)
+        transactionRepository.observeRiwayat(q.trim(), start, end, batas)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun onQueryChange(q: String) { queryFlow.value = q }
+    // Mengganti pencarian/rentang memulai lagi dari halaman pertama.
+    fun onQueryChange(q: String) { batasFlow.value = UKURAN_HALAMAN; queryFlow.value = q }
 
-    fun onFilterRentangChange(filter: FilterRentangRiwayat) { filterRentangFlow.value = filter }
+    fun onFilterRentangChange(filter: FilterRentangRiwayat) { batasFlow.value = UKURAN_HALAMAN; filterRentangFlow.value = filter }
+
+    fun muatLebih() { batasFlow.value = batasFlow.value + UKURAN_HALAMAN }
 
     fun batalkanTransaksi(id: Long, onError: (String) -> Unit) {
         if (!sessionManager.isAdmin()) {
@@ -141,5 +148,9 @@ class RiwayatViewModel @Inject constructor(
             tutupPreviewStruk()
             if (result is Result.Failure) onError(result.error.pesan)
         }
+    }
+
+    private companion object {
+        const val UKURAN_HALAMAN = 100
     }
 }

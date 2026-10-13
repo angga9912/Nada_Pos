@@ -22,6 +22,7 @@ import java.util.*
 @Composable
 fun RiwayatScreen(isAdmin: Boolean = true, viewModel: RiwayatViewModel = hiltViewModel()) {
     val riwayat by viewModel.riwayat.collectAsState()
+    val batas by viewModel.batas.collectAsState()
     val query by viewModel.query.collectAsState()
     val filterRentang by viewModel.filterRentang.collectAsState()
     val previewStruk by viewModel.previewStruk.collectAsState()
@@ -104,6 +105,14 @@ fun RiwayatScreen(isAdmin: Boolean = true, viewModel: RiwayatViewModel = hiltVie
                         }
                     )
                     Divider()
+                }
+                // Daftar dimuat bertahap; tombol muncul bila halaman terakhir penuh (kemungkinan masih ada yang lama).
+                if (riwayat.size >= batas) {
+                    item {
+                        TextButton(onClick = viewModel::muatLebih, modifier = Modifier.fillMaxWidth()) {
+                            Text("Muat lebih banyak")
+                        }
+                    }
                 }
             }
         }

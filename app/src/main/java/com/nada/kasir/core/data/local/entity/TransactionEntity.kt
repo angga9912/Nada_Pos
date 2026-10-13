@@ -1,11 +1,18 @@
 package com.nada.kasir.core.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 enum class TransactionStatus { COMPLETED, CANCELLED }
 
-@Entity(tableName = "transactions")
+@Entity(
+    tableName = "transactions",
+    indices = [
+        Index(value = ["noTransaksi"], unique = true),
+        Index(value = ["tanggalWaktu"])
+    ]
+)
 data class TransactionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val noTransaksi: String, // format INV-YYYYMMDD-XXXX, unik (poin 20)

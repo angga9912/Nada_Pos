@@ -44,6 +44,12 @@ class ProductRepository @Inject constructor(
                 return Result.Failure(AppError.BarcodeDuplikat)
             }
         }
+        // Kode produk juga tidak boleh sama dengan produk aktif lain. Form manual dulu tidak mengeceknya
+        // (hanya impor Excel), sehingga dua produk bisa punya kode yang sama.
+        val kode = product.kodeProduk.trim()
+        if (kode.isNotEmpty() && productDao.countByKodeProdukExcludingId(kode, product.id) > 0) {
+            return Result.Failure(AppError.KodeProdukDuplikat)
+        }
         return try {
             // Simpan produk + catat mutasi stoknya dalam SATU transaksi database (F-05): perubahan stok
             // lewat form produk sebelumnya mengubah angka stok tanpa jejak sama sekali.
@@ -86,8 +92,10 @@ class ProductRepository @Inject constructor(
 
         appDatabase.withTransaction {
             baris.forEach { b ->
-                val kodeSudahAda = productDao.countByKodeProduk(b.kodeProduk) > 0
-                val barcodeSudahAda = !b.barcode.isNullOrBlank() && productDao.countByBarcodeAll(b.barcode) > 0
+                // Aturan SAMA dengan form manual (simpan): bentrok hanya dengan produk AKTIF. Dulu impor juga
+                // menghitung produk yang sudah dihapus, sehingga barcode/kode bekas tidak bisa diimpor ulang.
+                val kodeSudahAda = productDao.countByKodeProdukExcludingId(b.kodeProduk, 0L) > 0
+                val barcodeSudahAda = !b.barcode.isNullOrBlank() && productDao.countByBarcodeExcludingId(b.barcode, 0L) > 0
 
                 when {
                     kodeSudahAda -> {

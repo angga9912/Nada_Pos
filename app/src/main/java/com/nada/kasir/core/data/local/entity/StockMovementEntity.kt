@@ -1,11 +1,19 @@
 package com.nada.kasir.core.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 enum class TipeMutasiStok { MASUK, KELUAR, PENYESUAIAN, PENJUALAN, PEMBATALAN }
 
-@Entity(tableName = "stock_movements")
+@Entity(
+    tableName = "stock_movements",
+    indices = [
+        Index(value = ["productId"]),
+        Index(value = ["referensiTransaksiId"]),
+        Index(value = ["tanggalWaktu"])
+    ]
+)
 data class StockMovementEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val productId: Long,

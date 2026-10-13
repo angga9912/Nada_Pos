@@ -152,6 +152,13 @@ android {
     }
 }
 
+// Ekspor skema Room (exportSchema = true di AppDatabase) ke app/schemas/ setiap kali build. MigrasiIndeksTest
+// membaca file hasil build itu untuk memastikan SQL migrasi cocok dengan anotasi di entity. Menyimpan (commit)
+// folder app/schemas/ ke repo disarankan agar kelak bisa dipakai untuk tes migrasi antarversi.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     // Compose

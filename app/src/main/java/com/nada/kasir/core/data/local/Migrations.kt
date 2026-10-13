@@ -173,3 +173,47 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
         )
     }
 }
+
+
+/**
+ * Migrasi 6 -> 7 (F-04): indeks untuk kolom yang sering dicari/digabung, dan nomor transaksi unik.
+ *
+ * Nama indeks WAJIB "index_<tabel>_<kolom>" dan SQL-nya HARUS sama dengan yang dibuat Room dari anotasi
+ * `@Index` di entity; Room menolak membuka database bila indeks hasil migrasi berbeda. Karena itu daftar
+ * pernyataan dipisah sebagai konstanta: `MigrasiIndeksTest` membandingkannya dengan skema yang diekspor Room
+ * (app/schemas/.../7.json), jadi salah ketik ketahuan di CI, bukan di HP pelanggan.
+ *
+ * Indeks UNIK hanya untuk `transactions.noTransaksi`. Sebelum dibuat, nomor ganda (kalau ada) diberi akhiran
+ * "-<id>" (dan lapis kedua "-DUP-<id>" bila akhiran itu bertabrakan) supaya migrasi tidak gagal di data lama. Barcode dan kode produk sengaja TIDAK dibuat unik di
+ * database: produk yang sudah dihapus (soft delete) boleh dipakai ulang kodenya, dan itu dijaga di
+ * `ProductRepository`.
+ */
+internal val SQL_MIGRASI_6_7: List<String> = listOf(
+    "UPDATE `transactions` SET `noTransaksi` = `noTransaksi` || '-' || `id` " +
+        "WHERE `id` NOT IN (SELECT MIN(`id`) FROM `transactions` GROUP BY `noTransaksi`)",
+    // Lapis kedua: hanya berpengaruh bila akhiran "-<id>" di atas kebetulan bertabrakan dengan nomor yang sudah ada
+    // (nyaris mustahil, tetapi tanpa ini CREATE UNIQUE INDEX akan gagal dan aplikasi tidak bisa dibuka setelah update).
+    "UPDATE `transactions` SET `noTransaksi` = `noTransaksi` || '-DUP-' || `id` " +
+        "WHERE EXISTS (SELECT 1 FROM `transactions` o WHERE o.`noTransaksi` = `transactions`.`noTransaksi` AND o.`id` < `transactions`.`id`)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS `index_transactions_noTransaksi` ON `transactions` (`noTransaksi`)",
+    "CREATE INDEX IF NOT EXISTS `index_transactions_tanggalWaktu` ON `transactions` (`tanggalWaktu`)",
+    "CREATE INDEX IF NOT EXISTS `index_transaction_items_transactionId` ON `transaction_items` (`transactionId`)",
+    "CREATE INDEX IF NOT EXISTS `index_transaction_items_productId` ON `transaction_items` (`productId`)",
+    "CREATE INDEX IF NOT EXISTS `index_payments_transactionId` ON `payments` (`transactionId`)",
+    "CREATE INDEX IF NOT EXISTS `index_stock_movements_productId` ON `stock_movements` (`productId`)",
+    "CREATE INDEX IF NOT EXISTS `index_stock_movements_referensiTransaksiId` ON `stock_movements` (`referensiTransaksiId`)",
+    "CREATE INDEX IF NOT EXISTS `index_stock_movements_tanggalWaktu` ON `stock_movements` (`tanggalWaktu`)",
+    "CREATE INDEX IF NOT EXISTS `index_products_barcode` ON `products` (`barcode`)",
+    "CREATE INDEX IF NOT EXISTS `index_products_kodeProduk` ON `products` (`kodeProduk`)",
+    "CREATE INDEX IF NOT EXISTS `index_products_categoryId` ON `products` (`categoryId`)",
+    "CREATE INDEX IF NOT EXISTS `index_purchases_supplierId` ON `purchases` (`supplierId`)",
+    "CREATE INDEX IF NOT EXISTS `index_purchases_noPembelian` ON `purchases` (`noPembelian`)",
+    "CREATE INDEX IF NOT EXISTS `index_purchase_items_purchaseId` ON `purchase_items` (`purchaseId`)",
+    "CREATE INDEX IF NOT EXISTS `index_hutang_piutang_nomorReferensi` ON `hutang_piutang` (`nomorReferensi`)"
+)
+
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        SQL_MIGRASI_6_7.forEach { db.execSQL(it) }
+    }
+}

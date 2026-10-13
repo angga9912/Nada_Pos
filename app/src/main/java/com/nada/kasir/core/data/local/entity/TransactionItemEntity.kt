@@ -1,9 +1,16 @@
 package com.nada.kasir.core.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "transaction_items")
+@Entity(
+    tableName = "transaction_items",
+    indices = [
+        Index(value = ["transactionId"]),
+        Index(value = ["productId"])
+    ]
+)
 data class TransactionItemEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val transactionId: Long,

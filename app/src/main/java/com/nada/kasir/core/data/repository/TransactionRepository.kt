@@ -236,8 +236,9 @@ class TransactionRepository @Inject constructor(
         }
     }
 
-    fun observeRiwayat(query: String, startMillis: Long, endMillis: Long): Flow<List<TransactionEntity>> =
-        transactionDao.observeRiwayat(query, startMillis, endMillis)
+    /** [limit] membatasi jumlah baris (terbaru dulu) agar filter "Semua" tidak memuat seluruh riwayat sekaligus. */
+    fun observeRiwayat(query: String, startMillis: Long, endMillis: Long, limit: Int = 100): Flow<List<TransactionEntity>> =
+        transactionDao.observeRiwayat(query, startMillis, endMillis, limit)
 
     fun observeTotalPenjualanHariIni(startMillis: Long, endMillis: Long): Flow<Double> =
         transactionDao.observeTotalPenjualan(startMillis, endMillis)

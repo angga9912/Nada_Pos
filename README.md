@@ -574,6 +574,28 @@ di ZIP ini, jadi tidak perlu setup tambahan.
      dan ikut Backup/Restore (id outlet dipertahankan). Tidak ada perubahan skema database pada tahap ini.
    - Belum ada: nama cabang di struk, filter cabang di Riwayat, dan stok terpisah per cabang (opsi B).
 
+### Database, indeks, dan migrasi (F-04)
+Versi database sekarang **7** (`MIGRATION_6_7`). Perubahannya:
+- **Indeks** untuk kolom yang sering dicari atau digabung: tanggal transaksi, `transaction_items` (transaksi dan produk),
+  `payments`, `stock_movements` (produk, transaksi, tanggal), `products` (barcode, kode produk, kategori), `purchases`,
+  `purchase_items`, dan `hutang_piutang.nomorReferensi`. Laporan dan Riwayat tidak lagi memindai seluruh tabel.
+- **Nomor transaksi unik** di tingkat database (`index_transactions_noTransaksi`). Bila data lama kebetulan punya nomor
+  ganda, migrasi memberi akhiran `-<id>` pada duplikatnya (dan `-DUP-<id>` bila akhiran itu bertabrakan dengan
+  nomor lain) supaya pembuatan indeks unik tidak gagal. Urutan ini sudah dijalankan di SQLite dengan data ganda
+  dan bertabrakan, hasilnya selalu unik.
+- **Barcode dan kode produk sengaja tidak dibuat unik di database**, karena produk yang sudah dihapus (soft delete)
+  boleh kodenya dipakai ulang. Aturannya dijaga di `ProductRepository`: bentrok hanya dengan produk **aktif** lain.
+- **Kode produk ganda kini ditolak di form manual** ("Kode produk sudah dipakai produk lain."); dulu hanya impor Excel
+  yang mengecek. Impor Excel memakai aturan yang sama dengan form (dulu ia juga menghitung produk yang sudah dihapus).
+- **Riwayat dimuat bertahap:** 100 transaksi terbaru, lalu tombol "Muat lebih banyak". Mengganti pencarian atau rentang
+  memulai lagi dari halaman pertama, sehingga filter "Semua" tidak memuat seluruh riwayat sekaligus.
+- **Skema Room diekspor** (`exportSchema = true`, `ksp { arg("room.schemaLocation", ...) }`) ke `app/schemas/`. Folder
+  itu sebaiknya di-commit agar kelak bisa dipakai untuk tes migrasi antarversi; CI mengunggahnya sebagai artifact
+  **skema-room** di setiap run (tab Actions → pilih run → Artifacts), tinggal unduh dan commit ke `app/schemas/`. `MigrasiIndeksTest` membaca skema 7.json
+  hasil build dan memastikan SQL migrasi 6→7 identik dengan indeks di entity, sehingga salah ketik ketahuan di CI dan
+  tidak membuat aplikasi gagal membuka database di HP pelanggan.
+- Belum ada: tes migrasi dari data nyata antarversi (butuh `androidTest` dengan emulator).
+
 Catatan perilaku Hutang/Piutang: omzet di Laporan menghitung penjualan piutang penuh pada tanggal
 transaksinya (dasar akrual), bukan saat dibayar; metode ini tampil sebagai "Piutang (belum dibayar)" di
 ringkasan metode pembayaran. Piutang dibuat dari Kasir (**piutang pelanggan**), sedangkan hutang ke

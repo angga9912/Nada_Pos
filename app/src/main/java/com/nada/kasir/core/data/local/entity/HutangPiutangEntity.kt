@@ -1,9 +1,15 @@
 package com.nada.kasir.core.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "hutang_piutang")
+@Entity(
+    tableName = "hutang_piutang",
+    indices = [
+        Index(value = ["nomorReferensi"])
+    ]
+)
 data class HutangPiutangEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val jenis: String, // PIUTANG atau HUTANG
