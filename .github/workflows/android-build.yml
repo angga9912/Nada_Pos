@@ -51,18 +51,22 @@ jobs:
           mv "$APK_PATH" app/build/outputs/apk/demo/debug/NadaPOS.apk
 
       - name: Upload APK sebagai artifact
+        continue-on-error: true   # artifact sekali-pakai; kuota penuh tidak boleh menggagalkan gerbang test
         uses: actions/upload-artifact@v4
         with:
           name: nada-kasir-custom-demo-debug
           path: app/build/outputs/apk/demo/debug/*.apk
           if-no-files-found: error
+          retention-days: 1
 
       - name: Upload laporan unit test
-        if: always()
+        if: failure()   # hanya perlu dibaca kalau test gagal
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-report
           path: app/build/reports/tests/
+          retention-days: 3
 
   # Job kecil khusus untuk MENGECEK apakah secret keystore sudah di-setup, hasilnya
   # dititipkan lewat "outputs" job supaya bisa dibaca di "if:" job build-release di bawah.
