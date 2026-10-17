@@ -56,7 +56,7 @@ object BackupEncryption {
     private const val PANJANG_TAG_BYTE = 16
     private const val UKURAN_HEADER = 8 + 4 + PANJANG_SALT + PANJANG_IV // 40
 
-    private const val ITERASI_DEFAULT = 150_000
+    private const val ITERASI_DEFAULT = 600_000 // rekomendasi OWASP untuk PBKDF2-HMAC-SHA256; backup lama tetap terbuka (iterasi dibaca dari header)
     // Batas wajar untuk iterasi yang dibaca dari file: mencegah file buatan orang lain memuat
     // iterasi raksasa yang membuat aplikasi "hang" saat mencoba membukanya.
     private const val ITERASI_MIN = 10_000
