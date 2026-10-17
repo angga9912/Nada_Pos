@@ -94,7 +94,7 @@ jobs:
   #    KEYSTORE_BASE64 (isi dari keystore_base64.txt), KEYSTORE_PASSWORD, KEY_ALIAS,
   #    dan KEY_PASSWORD. (Lisensi tidak butuh secret di build: cukup file license.public di repo.)
   build-release:
-    needs: check-secrets
+    needs: [build, check-secrets]
     runs-on: ubuntu-latest
     if: needs.check-secrets.outputs.has_keystore == 'true'
     permissions:
