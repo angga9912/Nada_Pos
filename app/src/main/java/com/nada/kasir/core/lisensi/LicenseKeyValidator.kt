@@ -64,7 +64,7 @@ object LicenseKeyValidator {
      * dibagikan ke HP lain, jadi setelah semua pelanggan lama dibuatkan kode baru (V2), ubah
      * menjadi false lalu build ulang - sejak itu hanya kode terikat perangkat yang diterima.
      */
-    private const val IZINKAN_KODE_TANPA_PERANGKAT = true
+    private const val IZINKAN_KODE_TANPA_PERANGKAT = false
     private const val EXPIRY_LIFETIME = "LIFETIME"
     private const val EXPIRY_DATE_PATTERN = "yyyyMMdd"
     private const val ALGORITMA_TANDA_TANGAN = "SHA256withECDSA"
