@@ -175,31 +175,61 @@ jobs:
             mv "$APK_PATH" "$DIR/NadaPOS.apk"
           done
 
+      # Run manual (Run workflow): APK disimpan sebagai artifact. Push ke main: APK masuk ke
+      # GitHub Release di bawah (aset release tidak memakai kuota artifact).
       - name: Upload APK Release FULL sebagai artifact
+        if: github.event_name != 'push'
         uses: actions/upload-artifact@v4
         with:
           name: nada-pos-full-release-signed
           path: app/build/outputs/apk/full/release/NadaPOS.apk
           if-no-files-found: error
+          retention-days: 7
 
       - name: Upload APK Release DEMO sebagai artifact
         if: ${{ inputs.build_demo }}
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: nada-pos-demo-release-signed
           path: app/build/outputs/apk/demo/release/NadaPOS.apk
           if-no-files-found: error
+          retention-days: 7
 
       # mapping.txt = "kunci" untuk membaca kembali nama asli dari crash log (SIMPAN tiap rilis,
       # jangan dibagikan ke pelanggan). Kalau R8 gagal, di sini juga ada missing_rules.txt
       # (daftar aturan yang kurang) - kirim file itu untuk diperbaiki.
       - name: Upload mapping R8 & log
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: r8-mapping-dan-log
           path: app/build/outputs/mapping/
           if-no-files-found: warn
+          retention-days: 30
+
+      # Publikasikan APK FULL ke GitHub Release repo ini (hanya dari push asli ke main).
+      # Harus SEBELUM step kenaikan versi: versi di version.properties saat ini adalah versi
+      # APK yang barusan dibuild. Nama aset selalu NadaPOS.apk, jadi link tetap
+      # .../releases/latest/download/NadaPOS.apk selalu menunjuk APK terbaru.
+      - name: Publikasikan GitHub Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION_NAME=$(grep VERSION_NAME app/version.properties | cut -d'=' -f2)
+          TAG="v$VERSION_NAME"
+          APK=app/build/outputs/apk/full/release/NadaPOS.apk
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG sudah ada - APK diganti."
+            gh release upload "$TAG" "$APK" --clobber
+          else
+            gh release create "$TAG" "$APK" \
+              --target "$GITHUB_SHA" \
+              --title "Nada POS $VERSION_NAME" \
+              --notes "APK FULL ditandatangani. Dibuild otomatis dari commit ${GITHUB_SHA::7}."
+          fi
 
       # Dari sini ke bawah HANYA jalan kalau semua step build di atas sukses (default GitHub
       # Actions: berhenti di step pertama yang gagal) DAN dipicu oleh push asli ke main - bukan
