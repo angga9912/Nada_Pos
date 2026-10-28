@@ -23,9 +23,13 @@
         android:label="@string/app_name"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
+        <!-- configChanges: memutar HP (mis. saat memotret produk dalam posisi lanskap) tidak membuat
+             activity dibuat ulang, sehingga isian form yang belum disimpan tidak hilang saat kembali
+             dari aplikasi kamera. Compose menyesuaikan tampilan sendiri tanpa recreate. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
