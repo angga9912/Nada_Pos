@@ -230,6 +230,7 @@ lisensi) sebelum dibagikan. Aturan pengecualian ada di `app/proguard-rules.pro`.
 | Workflow | Pemicu | Isi |
 |---|---|---|
 | `android-build.yml` | push dan PR ke `main`, atau manual (opsi `build_demo`) | **`build`**: unit test + APK demo debug (artifact 1 hari). **`build-release`** (hanya bila secret keystore ada): APK full release bertanda tangan, publikasi GitHub Release, lalu naikkan versi otomatis. |
+| `bot-test.yml` | push dan PR ke `main` yang mengubah `whatsapp-trial-bot/**` atau workflow ini, atau manual | Menjalankan `npm test` untuk bot WhatsApp (Node.js 20). Terpisah dari build Android dan hanya berizin baca. |
 | `generate-license.yml` | manual | Membuat kode aktivasi memakai secret `NADA_LICENSE_PRIVATE_KEY`, hasil di Summary run. |
 
 Detail `build-release`:
@@ -279,8 +280,9 @@ Pakai hasil Export sebagai template.
 - Aplikasi: `./gradlew testDemoDebugUnitTest` (28 kelas tes, sekitar 219 kasus). Mencakup lisensi dan ID Perangkat,
   enkripsi backup, kalkulator pembayaran dan keuntungan, logika stok/pembelian/hutang/outlet, format struk dan ESC/POS,
   validator Excel, hash password, aturan paket, dan migrasi database.
-- Bot WhatsApp: `cd whatsapp-trial-bot && npm test` (Node.js 20+, tanpa dependensi tambahan).
-- CI menjalankan tes aplikasi pada setiap push/PR. **Tes bot belum dijalankan di CI.**
+- Bot WhatsApp: `cd whatsapp-trial-bot && npm test` (Node.js 20+, tanpa dependensi tambahan, 33 kasus).
+- CI menjalankan tes aplikasi pada setiap push/PR (`android-build.yml`), dan tes bot lewat `bot-test.yml`
+  setiap folder `whatsapp-trial-bot/` berubah.
 
 **Manual di HP**
 - [ ] Tambah produk baru, cek muncul di Kasir. Barcode yang sudah ada harus ditolak.
@@ -310,7 +312,6 @@ Pakai hasil Export sebagai template.
 
 - Nama cabang di struk, filter cabang di Riwayat, dan stok terpisah per cabang.
 - Tes migrasi antarversi dengan data nyata (butuh `androidTest` dan emulator).
-- Tes bot WhatsApp di CI.
 - Sistem notifikasi (ikon di header Dashboard masih placeholder).
 - Validasi dan pencabutan lisensi secara online.
 
