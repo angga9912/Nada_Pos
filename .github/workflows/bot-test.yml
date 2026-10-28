@@ -1,0 +1,40 @@
+name: Tes Bot WhatsApp
+
+# Menjalankan tes whatsapp-trial-bot (Node.js, tanpa dependensi tambahan).
+# Dipisah dari android-build.yml supaya perubahan bot tidak memicu build Android (dan sebaliknya),
+# jadi hanya jalan bila ada perubahan di folder bot atau di file workflow ini. Bisa juga dipicu manual.
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'whatsapp-trial-bot/**'
+      - '.github/workflows/bot-test.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'whatsapp-trial-bot/**'
+      - '.github/workflows/bot-test.yml'
+  workflow_dispatch:
+
+# Tes tidak butuh izin tulis ke repo.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: whatsapp-trial-bot
+
+    steps:
+      - name: Checkout kode
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # sama dengan "engines" di whatsapp-trial-bot/package.json (>=20)
+
+      - name: Jalankan tes bot
+        run: npm test
