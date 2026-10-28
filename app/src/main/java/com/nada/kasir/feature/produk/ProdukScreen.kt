@@ -1,8 +1,12 @@
 package com.nada.kasir.feature.produk
 
+import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,6 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,14 +27,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.nada.kasir.core.data.local.entity.ProductEntity
 import com.nada.kasir.core.util.CurrencyFormatter
 import com.nada.kasir.core.util.FileShareHelper
 import com.nada.kasir.core.util.ProductPhotoStorageHelper
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -173,15 +182,77 @@ internal fun ProdukFormDialog(
     var stokMin by remember { mutableStateOf(initial?.stokMinimum?.toString() ?: "5") }
     var fotoPath by remember { mutableStateOf(initial?.fotoPath) }
     var errorValidasi by remember { mutableStateOf<String?>(null) }
+    var pesanFoto by remember { mutableStateOf<String?>(null) }
+    var tampilPilihanFoto by remember { mutableStateOf(false) }
+    // File sementara tempat aplikasi kamera menulis foto; null bila kamera tidak sedang dibuka.
+    var fotoKameraSementara by remember { mutableStateOf<File?>(null) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    // Foto baru menggantikan foto sebelumnya. Foto yang dibuat di form ini tetapi belum tersimpan ke produk
+    // dibuang supaya tidak menumpuk saat pengguna memotret atau memilih ulang.
+    fun pakaiFoto(pathBaru: String) {
+        val lama = fotoPath
+        if (lama != null && lama != initial?.fotoPath) ProductPhotoStorageHelper.hapusFoto(lama)
+        fotoPath = pathBaru
+        pesanFoto = null
+    }
+
     val pilihFoto = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             scope.launch {
                 val path = withContext(Dispatchers.IO) { ProductPhotoStorageHelper.simpanFotoDariUri(context, uri) }
-                if (path != null) fotoPath = path
+                if (path != null) {
+                    pakaiFoto(path)
+                } else {
+                    pesanFoto = "Foto tidak bisa dibaca. Coba pilih foto lain."
+                }
             }
+        }
+    }
+
+    val ambilFoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { berhasil ->
+        val sementara = fotoKameraSementara
+        fotoKameraSementara = null
+        if (sementara != null) {
+            if (berhasil) {
+                scope.launch {
+                    val path = withContext(Dispatchers.IO) { ProductPhotoStorageHelper.simpanFotoDariKamera(context, sementara) }
+                    if (path != null) {
+                        pakaiFoto(path)
+                    } else {
+                        pesanFoto = "Foto dari kamera gagal disimpan. Coba ambil lagi."
+                    }
+                }
+            } else {
+                sementara.delete() // dibatalkan di aplikasi kamera
+            }
+        }
+    }
+
+    fun bukaKamera() {
+        val siap = ProductPhotoStorageHelper.siapkanFotoKamera(context)
+        if (siap == null) {
+            pesanFoto = "Kamera tidak bisa dibuka. Coba lagi."
+            return
+        }
+        val (file, uri) = siap
+        fotoKameraSementara = file
+        try {
+            ambilFoto.launch(uri)
+        } catch (e: ActivityNotFoundException) {
+            fotoKameraSementara = null
+            file.delete()
+            pesanFoto = "Aplikasi kamera tidak ditemukan di HP ini. Gunakan pilihan Galeri."
+        }
+    }
+
+    val izinKamera = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { diizinkan ->
+        if (diizinkan) {
+            bukaKamera()
+        } else {
+            pesanFoto = "Izin kamera ditolak. Aktifkan di Pengaturan HP, atau pilih foto dari Galeri."
         }
     }
 
@@ -190,7 +261,11 @@ internal fun ProdukFormDialog(
         title = { Text(if (initial == null) "Tambah Produk" else "Edit Produk") },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                FotoProdukPicker(fotoPath = fotoPath, onPilihFoto = { pilihFoto.launch("image/*") })
+                FotoProdukPicker(fotoPath = fotoPath, onPilihFoto = { tampilPilihanFoto = true })
+                pesanFoto?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
                 Spacer(Modifier.height(8.dp))
                 errorValidasi?.let {
                     Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -266,9 +341,49 @@ internal fun ProdukFormDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
     )
+
+    if (tampilPilihanFoto) {
+        AlertDialog(
+            onDismissRequest = { tampilPilihanFoto = false },
+            title = { Text("Foto Produk") },
+            text = {
+                Column {
+                    PilihanFotoItem(Icons.Filled.PhotoCamera, "Ambil dari Kamera") {
+                        tampilPilihanFoto = false
+                        val sudahDiizinkan = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+                            PackageManager.PERMISSION_GRANTED
+                        if (sudahDiizinkan) bukaKamera() else izinKamera.launch(Manifest.permission.CAMERA)
+                    }
+                    PilihanFotoItem(Icons.Filled.PhotoLibrary, "Pilih dari Galeri") {
+                        tampilPilihanFoto = false
+                        pilihFoto.launch("image/*")
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { tampilPilihanFoto = false }) { Text("Batal") } }
+        )
+    }
 }
 
-/** Kotak persegi di form Produk untuk memilih/ganti foto dari galeri HP. */
+/** Satu baris pilihan (ikon + teks) di dialog pilihan sumber foto produk. */
+@Composable
+private fun PilihanFotoItem(ikon: ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(ikon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(16.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+/** Kotak persegi di form Produk untuk menambah/mengganti foto (kamera atau galeri). */
 @Composable
 private fun FotoProdukPicker(fotoPath: String?, onPilihFoto: () -> Unit) {
     Box(
@@ -294,7 +409,7 @@ private fun FotoProdukPicker(fotoPath: String?, onPilihFoto: () -> Unit) {
                 modifier = Modifier.size(28.dp)
             )
         }
-        // Tombol kamera kecil di pojok, di atas foto - tap di mana saja pada kotak ini membuka galeri
+        // Tombol kamera kecil di pojok, di atas foto - membuka pilihan Kamera atau Galeri
         Surface(
             onClick = onPilihFoto,
             color = MaterialTheme.colorScheme.primary,
@@ -303,7 +418,7 @@ private fun FotoProdukPicker(fotoPath: String?, onPilihFoto: () -> Unit) {
         ) {
             Icon(
                 Icons.Filled.AddAPhoto,
-                contentDescription = "Pilih foto produk",
+                contentDescription = "Tambah atau ganti foto produk",
                 tint = androidx.compose.ui.graphics.Color.White,
                 modifier = Modifier.padding(6.dp).size(16.dp)
             )
