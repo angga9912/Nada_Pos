@@ -57,8 +57,16 @@ data class KasirUiState(
     val barcodeBelumTerdaftar: String? = null,
     val jumlahTransaksiHariIni: Int = 0,
     val tampilkanSaranUpgrade: Boolean = false,
-    val paketAktif: PaketAplikasi = PaketAplikasi.BASIC
+    val paketAktif: PaketAplikasi = PaketAplikasi.BASIC,
+    /** Pilihan toggle Auto Scan yang tersimpan (belum memperhitungkan paket). */
+    val autoScanAktif: Boolean = false
 ) {
+    /** Auto Scan hanya untuk paket yang mencakup [FiturPaket.AUTO_SCAN] (Custom dan Pro). */
+    val autoScanTersedia: Boolean get() = paketAktif.mengizinkan(FiturPaket.AUTO_SCAN)
+
+    /** Mode yang benar-benar berjalan: dipilih kasir DAN diizinkan paket. */
+    val autoScanEfektif: Boolean get() = autoScanAktif && autoScanTersedia
+
     /** Metode "Piutang (bayar nanti)" di dialog pembayaran hanya untuk paket yang mencakup Hutang/Piutang. */
     val piutangTersedia: Boolean get() = paketAktif.mengizinkan(FiturPaket.HUTANG_PIUTANG)
     val subtotal: Double get() = keranjang.sumOf { it.harga * it.qty }
@@ -117,12 +125,14 @@ class KasirViewModel @Inject constructor(
         storeRepository.observeStore(),
         transactionRepository.observeJumlahTransaksiHariIni(awalHariIniMillis(), akhirHariIniMillis()),
         paketRepository.observePaketAktif(),
-        paketRepository.observeSaranUpgradeDismissedTanggal()
+        paketRepository.observeSaranUpgradeDismissedTanggal(),
+        paketRepository.observeAutoScanAktif()
     ) { flows ->
         @Suppress("UNCHECKED_CAST")
         val jumlahTransaksiHariIni = flows[13] as Int
         val paketAktif = flows[14] as PaketAplikasi
         val dismissedTanggal = flows[15] as String?
+        val autoScanAktif = flows[16] as Boolean
         KasirUiState(
             produk = flows[0] as List<ProductEntity>,
             keranjang = flows[1] as List<KeranjangItem>,
@@ -139,6 +149,7 @@ class KasirViewModel @Inject constructor(
             store = flows[12] as com.nada.kasir.core.data.local.entity.StoreEntity?,
             jumlahTransaksiHariIni = jumlahTransaksiHariIni,
             paketAktif = paketAktif,
+            autoScanAktif = autoScanAktif,
             // Cuma tampil kalau: masih Basic (Custom/Pro tidak perlu diajak upgrade lagi),
             // sudah lewat ambang harian, DAN belum ditutup kasir HARI ini juga.
             tampilkanSaranUpgrade = paketAktif == PaketAplikasi.BASIC &&
@@ -214,6 +225,88 @@ class KasirViewModel @Inject constructor(
     }
 
     fun tutupBarcodeBelumTerdaftar() { barcodeBelumTerdaftarFlow.value = null }
+
+    // ---- Auto Scan (kamera beruntun, paket Custom dan Pro) ----
+    // Sengaja dibuat sebagai fungsi TERPISAH dari tambahKeKeranjang/ubahQty: di grid produk dan
+    // scan satu kali, qty yang melebihi stok tetap DIBLOK seperti sebelumnya. Di Auto Scan produk
+    // tetap masuk keranjang (stok kurang hanya ditandai peringatan di baris produk) supaya scan
+    // beruntun tidak terputus dialog. Pembayaran TETAP diblok oleh validasi stok di
+    // TransactionRepository.simpanTransaksiKasir - logika itu tidak diubah.
+
+    /** Simpan pilihan toggle Auto Scan. Diabaikan kalau paket belum mengizinkan. */
+    fun setAutoScanAktif(aktif: Boolean) {
+        if (aktif && !uiState.value.autoScanTersedia) return
+        viewModelScope.launch { paketRepository.setAutoScanAktif(aktif) }
+    }
+
+    /** Barcode terbaca kamera pada mode Auto Scan: masuk keranjang, atau tawarkan produk baru. */
+    fun tambahDariAutoScan(barcode: String) {
+        viewModelScope.launch {
+            val product = productRepository.cariByBarcode(barcode)
+            if (product == null) {
+                barcodeBelumTerdaftarFlow.value = barcode
+            } else {
+                tambahKeKeranjangAutoScan(product)
+            }
+        }
+    }
+
+    private fun tambahKeKeranjangAutoScan(product: ProductEntity) {
+        keranjangFlow.update { current ->
+            val idx = current.indexOfFirst { it.productId == product.id }
+            if (idx >= 0) {
+                val daftar = current.toMutableList()
+                daftar[idx] = daftar[idx].copy(qty = daftar[idx].qty + 1)
+                daftar
+            } else {
+                current + KeranjangItem(
+                    productId = product.id,
+                    nama = product.nama,
+                    harga = product.hargaJual,
+                    qty = 1,
+                    stokTersedia = product.stok
+                )
+            }
+        }
+    }
+
+    /** Ubah qty dari panel Auto Scan; qty boleh melebihi stok (hanya diberi peringatan di UI). */
+    fun ubahQtyAutoScan(productId: Long, qtyBaru: Int) {
+        keranjangFlow.update { current ->
+            val idx = current.indexOfFirst { it.productId == productId }
+            when {
+                idx < 0 -> current
+                qtyBaru <= 0 -> current.filterIndexed { i, _ -> i != idx }
+                else -> {
+                    val daftar = current.toMutableList()
+                    daftar[idx] = daftar[idx].copy(qty = qtyBaru)
+                    daftar
+                }
+            }
+        }
+        sesuaikanDiskonDenganKeranjang()
+    }
+
+    /**
+     * Produk baru dari barcode yang belum terdaftar (saat Auto Scan): simpan, lalu langsung masuk
+     * ke keranjang dengan qty 1. Status "belum terdaftar" dibersihkan LEBIH DULU supaya dialog
+     * tidak sempat tampil ulang selama proses simpan dan kamera bisa lanjut.
+     */
+    fun simpanProdukBaruDanTambah(product: ProductEntity) {
+        viewModelScope.launch {
+            barcodeBelumTerdaftarFlow.value = null
+            when (val result = productRepository.simpan(product)) {
+                is Result.Failure -> errorFlow.value = result.error.pesan
+                is Result.Success -> {
+                    val tersimpan = product.barcode
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { productRepository.cariByBarcode(it) }
+                        ?: product.copy(id = result.data)
+                    tambahKeKeranjangAutoScan(tersimpan)
+                }
+            }
+        }
+    }
 
     /** Simpan produk baru dari dialog "Produk belum terdaftar" (barcode hasil scan sudah terisi). */
     fun simpanProdukBaru(product: ProductEntity) {

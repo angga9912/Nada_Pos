@@ -43,6 +43,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -78,6 +79,9 @@ import java.util.concurrent.Executors
 fun BarcodeScannerScreen(
     onDetected: (String) -> Unit,
     onClose: () -> Unit,
+    // Toggle Auto Scan di bar atas (null = tidak ditampilkan). Mode scan satu kali ini tetap
+    // berjalan persis seperti sebelumnya selama toggle mati.
+    opsiAutoScan: OpsiAutoScan? = null,
     viewModel: BarcodeScannerViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -189,6 +193,7 @@ fun BarcodeScannerScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 ScannerIconButton(icon = Icons.AutoMirrored.Filled.ArrowBack, deskripsi = "Kembali", onClick = onClose)
+                if (opsiAutoScan != null) ToggleAutoScan(opsiAutoScan)
                 val punyaFlash = cameraRef?.cameraInfo?.hasFlashUnit() == true
                 if (punyaFlash) {
                     ScannerIconButton(
@@ -260,7 +265,7 @@ fun BarcodeScannerScreen(
 }
 
 @Composable
-private fun ScannerIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, deskripsi: String, onClick: () -> Unit) {
+internal fun ScannerIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, deskripsi: String, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = CircleShape,
@@ -280,9 +285,8 @@ private fun ScannerIconButton(icon: androidx.compose.ui.graphics.vector.ImageVec
  * warna per toko (poin 2 & 21) tetap konsisten sampai ke layar scan.
  */
 @Composable
-private fun BingkaiScan(sudahTerbaca: Boolean, modifier: Modifier = Modifier) {
+internal fun BingkaiScan(sudahTerbaca: Boolean, modifier: Modifier = Modifier, ukuran: Dp = 220.dp) {
     val warnaAksen = if (sudahTerbaca) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
-    val ukuran = 220.dp
 
     val infiniteTransition = rememberInfiniteTransition(label = "scanline")
     val progres by infiniteTransition.animateFloat(

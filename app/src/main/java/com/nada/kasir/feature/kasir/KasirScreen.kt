@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,7 +38,10 @@ import com.nada.kasir.core.data.local.entity.MetodePembayaran
 import com.nada.kasir.core.util.BeepPlayer
 import com.nada.kasir.core.util.CurrencyFormatter
 import com.nada.kasir.core.util.HandheldScannerDetector
+import com.nada.kasir.core.paket.FiturPaket
+import com.nada.kasir.feature.kasir.barcode.AutoScanScreen
 import com.nada.kasir.feature.kasir.barcode.BarcodeScannerScreen
+import com.nada.kasir.feature.kasir.barcode.OpsiAutoScan
 import com.nada.kasir.feature.produk.ProdukFormDialog
 import com.nada.kasir.feature.struk.StrukPreviewDialog
 
@@ -62,7 +66,10 @@ fun KasirScreen(
     val outletAktif by viewModel.outletAktif.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     var showPembayaranDialog by remember { mutableStateOf(false) }
-    var showBarcodeScanner by remember { mutableStateOf(false) }
+    // rememberSaveable: Activity dibuat ulang saat HP diputar - tanpa ini kamera menutup sendiri
+    // setiap kali kasir memutar layar (padahal mode Auto Scan sengaja punya tata letak landscape).
+    var showBarcodeScanner by rememberSaveable { mutableStateOf(false) }
+    var showAutoScanTerkunciDialog by remember { mutableStateOf(false) }
     var tampilFormProdukBaru by remember { mutableStateOf(false) }
     // State quick action "+ Diskon" & "+ Pelanggan" di keranjang (poin desain mockup).
     // Nama pembeli disimpan di layar ini (bukan ViewModel) supaya bisa langsung mengisi
@@ -79,18 +86,6 @@ fun KasirScreen(
             viewModel.tambahDariBarcode(kode)
             viewModel.onQueryChange("")
         })
-    }
-
-    if (showBarcodeScanner) {
-        BarcodeScannerScreen(
-            onDetected = { kode ->
-                BeepPlayer.beep()
-                showBarcodeScanner = false
-                viewModel.tambahDariBarcode(kode)
-            },
-            onClose = { showBarcodeScanner = false }
-        )
-        return
     }
 
     if (state.transaksiBerhasilId != null) {
@@ -130,7 +125,10 @@ fun KasirScreen(
                 },
                 onSimpan = { produk ->
                     tampilFormProdukBaru = false
-                    viewModel.simpanProdukBaru(produk)
+                    // Saat kamera Auto Scan masih terbuka: produk baru langsung masuk keranjang
+                    // dan kamera lanjut; di luar itu alur lama (hanya simpan produk) tidak berubah.
+                    if (showBarcodeScanner) viewModel.simpanProdukBaruDanTambah(produk)
+                    else viewModel.simpanProdukBaru(produk)
                 }
             )
         } else if (isAdmin) {
@@ -164,6 +162,62 @@ fun KasirScreen(
             title = { Text("Perhatian") },
             text = { Text(pesan) }
         )
+    }
+
+    if (showBarcodeScanner) {
+        val opsiAutoScan = OpsiAutoScan(
+            aktif = state.autoScanAktif,
+            terkunci = !state.autoScanTersedia,
+            onUbah = { viewModel.setAutoScanAktif(it) },
+            onTerkunciDiklik = { showAutoScanTerkunciDialog = true }
+        )
+        if (state.autoScanEfektif) {
+            AutoScanScreen(
+                keranjang = state.keranjang,
+                // Pemindaian dijeda selama dialog produk baru / pesan error tampil di atas kamera.
+                jeda = state.barcodeBelumTerdaftar != null || state.errorPesan != null || showAutoScanTerkunciDialog,
+                opsiAutoScan = opsiAutoScan,
+                onBarcodeTerbaca = { kode ->
+                    BeepPlayer.beep()
+                    viewModel.tambahDariAutoScan(kode)
+                },
+                onUbahQty = viewModel::ubahQtyAutoScan,
+                onSelesai = { showBarcodeScanner = false }
+            )
+        } else {
+            BarcodeScannerScreen(
+                onDetected = { kode ->
+                    BeepPlayer.beep()
+                    showBarcodeScanner = false
+                    viewModel.tambahDariBarcode(kode)
+                },
+                onClose = { showBarcodeScanner = false },
+                opsiAutoScan = opsiAutoScan
+            )
+        }
+        if (showAutoScanTerkunciDialog) {
+            AlertDialog(
+                onDismissRequest = { showAutoScanTerkunciDialog = false },
+                title = { Text("Auto Scan terkunci") },
+                text = {
+                    Text(
+                        "Auto Scan (scan beruntun tanpa menekan tombol lagi) tersedia di paket " +
+                            "${FiturPaket.AUTO_SCAN.labelPaketTersedia}. Upgrade untuk memakainya."
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showAutoScanTerkunciDialog = false
+                        showBarcodeScanner = false
+                        onBukaInfoPaket()
+                    }) { Text("Lihat Paket") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAutoScanTerkunciDialog = false }) { Text("Nanti") }
+                }
+            )
+        }
+        return
     }
 
     val jumlahDiKeranjang: (Long) -> Int = { productId ->
@@ -875,6 +929,7 @@ private fun KeranjangPanel(
                             qty = item.qty,
                             harga = item.harga,
                             subtotal = item.subtotal,
+                            stokTersedia = item.stokTersedia,
                             onQtyChange = { qtyBaru -> onUbahQty(item.productId, qtyBaru) },
                             onHapus = { onHapusItem(item.productId) }
                         )
@@ -981,7 +1036,7 @@ private fun AksiCepatChip(label: String, aktif: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun KeranjangRow(nama: String, qty: Int, harga: Double, subtotal: Double, onQtyChange: (Int) -> Unit, onHapus: () -> Unit) {
+private fun KeranjangRow(nama: String, qty: Int, harga: Double, subtotal: Double, stokTersedia: Int, onQtyChange: (Int) -> Unit, onHapus: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -994,6 +1049,15 @@ private fun KeranjangRow(nama: String, qty: Int, harga: Double, subtotal: Double
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            // Qty yang masuk lewat Auto Scan boleh melebihi stok; pembayaran akan ditolak sampai
+            // qty dikurangi atau stok dikoreksi, jadi tandai barisnya di sini juga.
+            if (qty > stokTersedia) {
+                Text(
+                    "Stok tersisa ${stokTersedia.coerceAtLeast(0)} - kurangi qty sebelum bayar",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
         }
         Spacer(Modifier.width(4.dp))
         IconButtonQty(label = "−", onClick = { onQtyChange(qty - 1) })

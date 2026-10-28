@@ -35,6 +35,7 @@ private val daftarFitur = listOf(
     BarisFitur("Laporan Harian & Bulanan", basic = false, custom = true, pro = true),
     BarisFitur("Export ke Excel", basic = false, custom = true, pro = true),
     BarisFitur("Backup & Restore Data", basic = false, custom = true, pro = true),
+    BarisFitur("Auto Scan Barcode (kamera beruntun)", basic = false, custom = true, pro = true),
     BarisFitur("Multi User (Admin & Kasir)", basic = false, custom = false, pro = true),
     BarisFitur("Supplier", basic = false, custom = false, pro = true),
     BarisFitur("Pembelian ke Supplier", basic = false, custom = false, pro = true),
