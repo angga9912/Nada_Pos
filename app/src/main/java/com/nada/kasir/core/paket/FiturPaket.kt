@@ -10,6 +10,7 @@ package com.nada.kasir.core.paket
 enum class FiturPaket(val nama: String, val paketMinimum: PaketAplikasi) {
     BACKUP("Backup & Restore Data", PaketAplikasi.CUSTOM),
     LOGO_TOKO("Logo Toko di Struk", PaketAplikasi.CUSTOM),
+    AUTO_SCAN("Auto Scan Barcode", PaketAplikasi.CUSTOM),
     PENGGUNA("Manajemen Pengguna", PaketAplikasi.PRO),
     SUPPLIER("Supplier", PaketAplikasi.PRO),
     PEMBELIAN("Pembelian ke Supplier", PaketAplikasi.PRO),

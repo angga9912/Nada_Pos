@@ -9,6 +9,7 @@ import javax.inject.Singleton
 
 private const val KEY_PAKET_AKTIF = "paket_aktif"
 private const val KEY_SARAN_UPGRADE_DISMISS_TANGGAL = "saran_upgrade_dismiss_tanggal"
+private const val KEY_AUTO_SCAN_AKTIF = "auto_scan_aktif"
 
 @Singleton
 class PaketRepository @Inject constructor(
@@ -41,5 +42,17 @@ class PaketRepository @Inject constructor(
 
     suspend fun dismissSaranUpgradeHariIni(tanggalHariIni: String) {
         settingDao.upsert(SettingEntity(key = KEY_SARAN_UPGRADE_DISMISS_TANGGAL, value = tanggalHariIni))
+    }
+
+    /**
+     * Pilihan kasir untuk mode Auto Scan (toggle di layar kamera). Disimpan supaya diingat antar sesi.
+     * Ini HANYA preferensi: boleh tidaknya dipakai ditentukan paket ([FiturPaket.AUTO_SCAN]).
+     */
+    fun observeAutoScanAktif(): Flow<Boolean> = settingDao.observeAll().map { list ->
+        list.firstOrNull { it.key == KEY_AUTO_SCAN_AKTIF }?.value == "true"
+    }
+
+    suspend fun setAutoScanAktif(aktif: Boolean) {
+        settingDao.upsert(SettingEntity(key = KEY_AUTO_SCAN_AKTIF, value = aktif.toString()))
     }
 }
