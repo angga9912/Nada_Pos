@@ -231,6 +231,41 @@ jobs:
               --notes "APK FULL ditandatangani. Dibuild otomatis dari commit ${GITHUB_SHA::7}."
           fi
 
+      # Publikasikan APK yang SAMA ke repo DOWNLOAD (angga9912/Nada_Pos_Download). Repo inilah yang
+      # dipakai tombol download di website. Karena beda repo, github.token TIDAK cukup: butuh token
+      # sendiri di secret DOWNLOAD_REPO_TOKEN (fine-grained PAT, hanya untuk repo Nada_Pos_Download,
+      # izin "Contents: Read and write"). Kalau secret belum diisi, step ini dilewati dengan peringatan
+      # supaya build tidak gagal. "--latest" dipaksa karena repo download tidak punya commit baru
+      # di tiap rilis, sehingga GitHub bisa salah menentukan rilis mana yang terbaru. Nama aset tetap
+      # NadaPOS.apk, jadi link .../Nada_Pos_Download/releases/latest/download/NadaPOS.apk selalu
+      # menunjuk APK terbaru.
+      - name: Publikasikan ke repo Nada_Pos_Download
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          DOWNLOAD_REPO: angga9912/Nada_Pos_Download
+          DOWNLOAD_REPO_TOKEN: ${{ secrets.DOWNLOAD_REPO_TOKEN }}
+        run: |
+          if [ -z "$DOWNLOAD_REPO_TOKEN" ]; then
+            echo "::warning::Secret DOWNLOAD_REPO_TOKEN belum diisi - APK TIDAK dipublikasikan ke $DOWNLOAD_REPO (dilewati)."
+            exit 0
+          fi
+          export GH_TOKEN="$DOWNLOAD_REPO_TOKEN"
+          VERSION_NAME=$(grep VERSION_NAME app/version.properties | cut -d'=' -f2)
+          TAG="v$VERSION_NAME"
+          APK=app/build/outputs/apk/full/release/NadaPOS.apk
+          NOTES="APK FULL ditandatangani. Dibuild otomatis dari https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
+          if gh release view "$TAG" --repo "$DOWNLOAD_REPO" >/dev/null 2>&1; then
+            echo "Release $TAG sudah ada di $DOWNLOAD_REPO - APK diganti."
+            gh release upload "$TAG" "$APK" --repo "$DOWNLOAD_REPO" --clobber
+            gh release edit "$TAG" --repo "$DOWNLOAD_REPO" --latest
+          else
+            gh release create "$TAG" "$APK" \
+              --repo "$DOWNLOAD_REPO" \
+              --title "Nada POS $VERSION_NAME" \
+              --notes "$NOTES" \
+              --latest
+          fi
+
       # Dari sini ke bawah HANYA jalan kalau semua step build di atas sukses (default GitHub
       # Actions: berhenti di step pertama yang gagal) DAN dipicu oleh push asli ke main - bukan
       # dari "Run workflow" manual (workflow_dispatch), supaya rebuild/testing manual tidak ikut

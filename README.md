@@ -237,6 +237,11 @@ Detail `build-release`:
 - Berhenti bila `license.public` kosong.
 - Dari push ke `main`, APK dipublikasikan ke **GitHub Release** `v<versi>` dengan nama aset tetap `NadaPOS.apk`, sehingga
   `.../releases/latest/download/NadaPOS.apk` selalu menunjuk APK terbaru. Dari run selain push (mis. manual), APK disimpan sebagai artifact (7 hari).
+- Bila secret **`DOWNLOAD_REPO_TOKEN`** terisi, APK yang sama juga dipublikasikan ke Release `v<versi>` di repo
+  [`angga9912/Nada_Pos_Download`](https://github.com/angga9912/Nada_Pos_Download), dan ditandai sebagai **Latest**. Repo itulah yang
+  dipakai tombol download di website: `https://github.com/angga9912/Nada_Pos_Download/releases/latest/download/NadaPOS.apk`.
+  Token adalah fine-grained PAT yang hanya berlaku untuk repo `Nada_Pos_Download` dengan izin *Contents: Read and write*.
+  Bila secret belum diisi, step ini dilewati dengan peringatan dan build tidak gagal.
 - Setelah sukses, CI menaikkan `app/version.properties` (`versionCode` +1, patch +1) dan meng-commit dengan `[skip ci]`
   supaya tidak memicu loop. Run manual tidak menaikkan versi.
 - `mapping.txt` R8 diunggah sebagai artifact **`r8-mapping-dan-log`** (30 hari). Simpan tiap rilis untuk membaca crash log.
