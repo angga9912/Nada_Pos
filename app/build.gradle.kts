@@ -201,8 +201,8 @@ dependencies {
 
     // Firebase - Pantau Cabang (rekap harian cabang -> admin). Versi diatur BoM; tanpa modul -ktx.
     implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
-    implementation("com.google.firebase:firebase-auth")
-    implementation("com.google.firebase:firebase-firestore")
+    implementation("com.google.firebase:firebase-auth") { version { strictly("23.0.0") } }
+implementation("com.google.firebase:firebase-firestore") { version { strictly("25.0.0") } }
     // Task.await() untuk Firebase
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 implementation("com.google.guava:guava:33.2.1-android")
