@@ -200,7 +200,7 @@ dependencies {
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
     // Firebase - Pantau Cabang (rekap harian cabang -> admin). Versi diatur BoM; tanpa modul -ktx.
-    implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
+    
     implementation("com.google.firebase:firebase-auth") { version { strictly("23.0.0") } }
 implementation("com.google.firebase:firebase-firestore") { version { strictly("25.0.0") } }
     // Task.await() untuk Firebase
