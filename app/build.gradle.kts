@@ -8,6 +8,18 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// === Firebase (modul Pantau Cabang, paket Pro) ===
+// Plugin google-services HANYA dipasang bila app/google-services.json ada. Tanpa file itu aplikasi
+// tetap bisa dibuild (CI, tes unit) - fitur Pantau Cabang otomatis menampilkan "Firebase belum dikonfigurasi".
+// File itu diunduh dari Firebase Console (Project settings > Your apps). Daftarkan KEDUA package:
+// com.nada.kasir (full) dan com.nada.kasir.demo (demo) di project yang sama, supaya satu file cukup untuk dua flavor.
+// Isinya bukan rahasia (keamanan data dijaga firebase/firestore.rules), jadi boleh dicommit.
+if (rootProject.file("app/google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+} else {
+    logger.warn("INFO: app/google-services.json tidak ditemukan - fitur Pantau Cabang (Firebase) nonaktif pada build ini.")
+}
+
 // === Kunci PUBLIK lisensi ===
 // Lisensi memakai tanda tangan digital ECDSA (bukan lagi secret bersama/HMAC). APK hanya membawa
 // kunci PUBLIK (aman dilihat siapa pun, tidak bisa dipakai membuat kode). Kunci PRIVAT untuk membuat
@@ -186,6 +198,13 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.3.4")
     implementation("androidx.camera:camera-view:1.3.4")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
+
+    // Firebase - Pantau Cabang (rekap harian cabang -> admin). Versi diatur BoM; tanpa modul -ktx.
+    implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    // Task.await() untuk Firebase
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
     // Excel - Phase 3
     implementation("org.apache.poi:poi-ooxml:5.2.5")

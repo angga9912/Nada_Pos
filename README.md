@@ -78,6 +78,7 @@ belum lewat `FiturPaket`.
 - Supplier dengan pencarian, edit, status aktif, dan detail pembelian.
 - Outlet / Cabang (Pro): pilih cabang aktif per HP. Transaksi, pembelian, dan perubahan stok manual diberi label cabang.
   Laporan bisa difilter per cabang. Stok tetap satu pool untuk semua cabang.
+- Pantau Cabang (Pro, Tahap 1 - fondasi): rekap harian tiap cabang dikirim ke Firebase agar admin bisa memantau dari jauh. Belum ada layar; lihat docs/PANTAU_CABANG.md.
 - Hutang/Piutang (Pro): ringkasan, jatuh tempo, cicilan sampai lunas, dan riwayat pembayaran.
   Omzet laporan memakai dasar akrual (piutang dihitung pada tanggal transaksi).
 

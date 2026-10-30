@@ -1,0 +1,68 @@
+rules_version = '2';
+
+// Aturan keamanan modul Pantau Cabang (Nada Pos).
+//
+// Struktur data:
+//   toko/{tokoId}                      -> tokoId = uid akun Firebase milik admin/pemilik toko
+//   toko/{tokoId}/anggota/{uid}        -> daftar akun yang boleh mengakses toko ini
+//        { peran: "ADMIN" | "CABANG", kodeDokumen: "CBG-01" (wajib untuk CABANG) }
+//   toko/{tokoId}/rekap/{tanggal}_{kodeDokumen}  -> rekap harian satu cabang
+//
+// Hak akses:
+//   - Pemilik (uid == tokoId) dan anggota ber-peran ADMIN: baca & kelola semuanya.
+//   - Anggota ber-peran CABANG: hanya boleh MENULIS rekap miliknya sendiri (id dokumen harus berakhiran
+//     kodeDokumen-nya), dan tidak boleh membaca rekap cabang lain.
+//   - Selain itu (belum login / bukan anggota): ditolak.
+//
+// BELUM DIUJI di emulator. Sebelum dipakai pelanggan: uji lewat tab "Rules Playground" di Firebase Console.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /toko/{tokoId} {
+
+      function masuk() {
+        return request.auth != null;
+      }
+      function pemilik() {
+        return masuk() && request.auth.uid == tokoId;
+      }
+      function anggotaPath() {
+        return /databases/$(database)/documents/toko/$(tokoId)/anggota/$(request.auth.uid);
+      }
+      function anggotaAda() {
+        return masuk() && exists(anggotaPath());
+      }
+      function dataAnggota() {
+        return get(anggotaPath()).data;
+      }
+      function admin() {
+        return pemilik() || (anggotaAda() && dataAnggota().peran == 'ADMIN');
+      }
+      function cabang() {
+        return anggotaAda() && dataAnggota().peran == 'CABANG' && dataAnggota().kodeDokumen is string;
+      }
+
+      // Dokumen toko itu sendiri tidak dipakai; ditutup supaya tidak ada yang bisa menulis sembarangan.
+      allow read, write: if false;
+
+      match /anggota/{uid} {
+        // Anggota boleh membaca catatan dirinya sendiri; admin boleh melihat & mengelola semua anggota.
+        allow read: if masuk() && (request.auth.uid == uid || admin());
+        allow create, update, delete: if admin();
+      }
+
+      match /rekap/{rekapId} {
+        allow read: if admin();
+        allow delete: if admin();
+
+        allow create, update: if admin()
+          || (
+            cabang()
+            // id dokumen = "yyyy-MM-dd_" + kodeDokumen milik akun ini
+            && rekapId.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}_' + dataAnggota().kodeDokumen + '$')
+            && request.resource.data.kodeDokumen == dataAnggota().kodeDokumen
+            && request.resource.data.tanggal is string
+          );
+      }
+    }
+  }
+}

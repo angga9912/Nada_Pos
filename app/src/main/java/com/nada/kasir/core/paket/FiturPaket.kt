@@ -15,6 +15,7 @@ enum class FiturPaket(val nama: String, val paketMinimum: PaketAplikasi) {
     SUPPLIER("Supplier", PaketAplikasi.PRO),
     PEMBELIAN("Pembelian ke Supplier", PaketAplikasi.PRO),
     OUTLET("Outlet / Cabang", PaketAplikasi.PRO),
+    PANTAU_CABANG("Pantau Cabang (Cloud)", PaketAplikasi.PRO),
     HUTANG_PIUTANG("Hutang / Piutang", PaketAplikasi.PRO);
 
     /** Untuk pesan: "Custom dan Pro" atau "Pro". */
