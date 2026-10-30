@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "228262249178",
+    "project_id": "nadapos-4ba51",
+    "storage_bucket": "nadapos-4ba51.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:228262249178:android:fdd3cadcc3126b24945be3",
+        "android_client_info": {
+          "package_name": "com.nada.kasir"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDdRGdufYWew8bGA0VxLOOGOp3cJwXrQKU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
