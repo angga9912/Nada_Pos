@@ -6,7 +6,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
-    id("com.google.gms.google-services") version "4.5.0" apply false
+    id("com.google.gms.google-services")
 }
 
 // === Firebase (modul Pantau Cabang, paket Pro) ===
@@ -201,7 +201,7 @@ dependencies {
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
     // Firebase - Pantau Cabang (rekap harian cabang -> admin). Versi diatur BoM; tanpa modul -ktx.
-    implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
+    implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
     // Task.await() untuk Firebase
