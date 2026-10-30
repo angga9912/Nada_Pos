@@ -6,7 +6,6 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
-    id("com.google.gms.google-services")
 }
 
 // === Firebase (modul Pantau Cabang, paket Pro) ===
