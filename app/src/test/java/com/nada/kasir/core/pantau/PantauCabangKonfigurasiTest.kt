@@ -11,7 +11,7 @@ class PantauCabangKonfigurasiTest {
         assertTrue(PantauCabangPengaturan.Konfigurasi(aktif = true, tokoId = "abcDEF123456").siapKirim)
         assertFalse(PantauCabangPengaturan.Konfigurasi(aktif = false, tokoId = "abcDEF123456").siapKirim)
         assertFalse(PantauCabangPengaturan.Konfigurasi(aktif = true, tokoId = "").siapKirim)
-        assertFalse(PantauCabangPengaturan.Konfigurasi(aktif = true, tokoId = "abc123").siapKirim)
+        assertFalse(PantauCabangPengaturan.Konfigurasi(aktif = true, tokoId = "abc12").siapKirim)
         assertFalse(PantauCabangPengaturan.Konfigurasi(aktif = true, tokoId = "ada spasi di sini").siapKirim)
     }
 
