@@ -10,6 +10,7 @@ import javax.inject.Singleton
 private const val KEY_PANTAU_AKTIF = "pantau_aktif"
 private const val KEY_PANTAU_TOKO_ID = "pantau_toko_id"
 private const val KEY_PANTAU_TERAKHIR_KIRIM = "pantau_terakhir_kirim"
+private const val KEY_PANTAU_STATUS = "pantau_status_terakhir"
 
 /** Setelan modul Pantau Cabang per HP (disimpan di tabel settings, seperti fitur lain). */
 @Singleton
@@ -20,7 +21,9 @@ class PantauCabangPengaturan @Inject constructor(
         val aktif: Boolean = false,
         val tokoId: String = "",
         /** Waktu (epoch millis) terakhir rekap berhasil terkirim; null = belum pernah. */
-        val terakhirKirim: Long? = null
+        val terakhirKirim: Long? = null,
+        /** Pesan kegagalan pengiriman terakhir; null bila pengiriman terakhir berhasil. */
+        val pesanTerakhir: String? = null
     ) {
         /** Siap dipakai mengirim: dinyalakan dan kode toko valid. */
         val siapKirim: Boolean get() = aktif && RekapHarianLogic.validasiTokoId(tokoId) == null
@@ -31,14 +34,16 @@ class PantauCabangPengaturan @Inject constructor(
         Konfigurasi(
             aktif = nilai(KEY_PANTAU_AKTIF) == "true",
             tokoId = nilai(KEY_PANTAU_TOKO_ID).orEmpty(),
-            terakhirKirim = nilai(KEY_PANTAU_TERAKHIR_KIRIM)?.toLongOrNull()
+            terakhirKirim = nilai(KEY_PANTAU_TERAKHIR_KIRIM)?.toLongOrNull(),
+            pesanTerakhir = nilai(KEY_PANTAU_STATUS)?.takeIf { it.isNotBlank() }
         )
     }
 
     suspend fun baca(): Konfigurasi = Konfigurasi(
         aktif = settingDao.get(KEY_PANTAU_AKTIF) == "true",
         tokoId = settingDao.get(KEY_PANTAU_TOKO_ID).orEmpty(),
-        terakhirKirim = settingDao.get(KEY_PANTAU_TERAKHIR_KIRIM)?.toLongOrNull()
+        terakhirKirim = settingDao.get(KEY_PANTAU_TERAKHIR_KIRIM)?.toLongOrNull(),
+        pesanTerakhir = settingDao.get(KEY_PANTAU_STATUS)?.takeIf { it.isNotBlank() }
     )
 
     suspend fun simpan(aktif: Boolean, tokoId: String) {
@@ -48,5 +53,10 @@ class PantauCabangPengaturan @Inject constructor(
 
     suspend fun catatKirim(waktu: Long) {
         settingDao.upsert(SettingEntity(key = KEY_PANTAU_TERAKHIR_KIRIM, value = waktu.toString()))
+    }
+
+    /** Simpan pesan kegagalan terakhir; null menghapusnya (pengiriman terakhir sukses). */
+    suspend fun catatStatus(pesan: String?) {
+        settingDao.upsert(SettingEntity(key = KEY_PANTAU_STATUS, value = pesan.orEmpty()))
     }
 }

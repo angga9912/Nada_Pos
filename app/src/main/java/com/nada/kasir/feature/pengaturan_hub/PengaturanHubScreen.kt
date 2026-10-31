@@ -38,6 +38,7 @@ fun PengaturanHubScreen(
     onBukaSupplier: () -> Unit,
     onBukaPembelian: () -> Unit,
     onBukaOutlet: () -> Unit,
+    onBukaPantauCabang: () -> Unit,
     onBukaHutangPiutang: () -> Unit,
     onBukaBackup: () -> Unit,
     onBukaInfoPaket: () -> Unit,
@@ -60,6 +61,9 @@ fun PengaturanHubScreen(
         }
         if (paketAktif.mengizinkan(FiturPaket.OUTLET)) {
             add(ItemPengaturan("Outlet / Cabang", "Kelola cabang dan lokasi", Icons.Filled.Store, onBukaOutlet))
+        }
+        if (paketAktif.mengizinkan(FiturPaket.PANTAU_CABANG)) {
+            add(ItemPengaturan("Pantau Cabang", "Kirim rekap harian ke cloud untuk dipantau admin", Icons.Filled.Cloud, onBukaPantauCabang))
         }
         if (paketAktif.mengizinkan(FiturPaket.HUTANG_PIUTANG)) {
             add(ItemPengaturan("Hutang / Piutang", "Catat tagihan dan piutang", Icons.Filled.AccountBalanceWallet, onBukaHutangPiutang))

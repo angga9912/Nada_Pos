@@ -1,4 +1,4 @@
-# Pantau Cabang (Firebase) - Tahap 1
+# Pantau Cabang (Firebase) - Tahap 1 & 2 (sisi cabang)
 
 Admin memantau rekap penjualan harian semua cabang dari jarak jauh. Tiap cabang = satu HP.
 Hanya paket **Pro** (`FiturPaket.PANTAU_CABANG`). Aplikasi tetap offline-first: kasir tidak pernah menunggu internet.
@@ -35,3 +35,11 @@ Tanpa langkah 3 aplikasi tetap bisa dibuild; fitur ini menampilkan "Firebase bel
 - Mengirim butuh internet. Bila offline, tulisan ditahan antrean Firestore dan terkirim sendiri saat online.
 - Plan gratis Firebase (Spark) cukup untuk puluhan cabang dengan rekap harian; pantau kuota bila pelanggan banyak.
 - Aturan keamanan belum diuji di emulator.
+
+## Tahap 2 - sisi cabang (aplikasi)
+- Menu **Pengaturan > Pantau Cabang** (admin, paket Pro): login akun cabang Firebase, isi Kode Toko, nyalakan
+  "Kirim rekap otomatis", tombol "Kirim rekap sekarang", dan status terakhir terkirim/gagal.
+- Pengiriman otomatis lewat WorkManager tiap 3 jam, hanya saat ada internet. Jadwal disamakan dengan setelan
+  setiap aplikasi dibuka (aman setelah restore backup). Gagal sementara diulang maksimal 3 kali per putaran.
+- Sebelum menyalakan: pilih **cabang aktif** di menu Outlet / Cabang, karena kode outlet itulah identitas cabang di rekap.
+- Dashboard web untuk admin (Vercel) dikerjakan terpisah di folder `web-dashboard/`.
