@@ -206,7 +206,6 @@ dependencies {
 implementation("com.google.firebase:firebase-firestore") { version { strictly("25.0.0") } }
     // Task.await() untuk Firebase
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
-implementation("com.google.guava:guava:33.2.1-android")
     // WAJIB bersama Firebase: Firebase menarik "listenablefuture:9999.0-empty-to-avoid-conflict-with-guava"
     // (artefak kosong) yang menggantikan versi asli, sehingga CameraX (AutoScanScreen/BarcodeScannerScreen)
     // gagal compile: "Cannot access class ListenableFuture". Guava asli menyediakan class tersebut.
