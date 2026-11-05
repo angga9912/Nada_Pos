@@ -1,4 +1,4 @@
-# Pantau Cabang (Firebase) - Tahap 1 & 2 (sisi cabang)
+# Pantau Cabang (Firebase) - Tahap 1, 2, dan 3A
 
 Admin memantau rekap penjualan harian semua cabang dari jarak jauh. Tiap cabang = satu HP.
 Hanya paket **Pro** (`FiturPaket.PANTAU_CABANG`). Aplikasi tetap offline-first: kasir tidak pernah menunggu internet.
@@ -34,7 +34,7 @@ Tanpa langkah 3 aplikasi tetap bisa dibuild; fitur ini menampilkan "Firebase bel
 - Kode cabang di rekap = **kode outlet aktif di HP itu**. Bila outlet aktif diganti, rekap berikutnya memakai kode baru.
 - Mengirim butuh internet. Bila offline, tulisan ditahan antrean Firestore dan terkirim sendiri saat online.
 - Plan gratis Firebase (Spark) cukup untuk puluhan cabang dengan rekap harian; pantau kuota bila pelanggan banyak.
-- Aturan keamanan belum diuji di emulator.
+- Aturan keamanan diuji otomatis di emulator lewat GitHub Actions (workflow "Uji aturan Firestore", folder `firebase/test`).
 
 ## Tahap 2 - sisi cabang (aplikasi)
 - Menu **Pengaturan > Pantau Cabang** (admin, paket Pro): login akun cabang Firebase, isi Kode Toko, nyalakan
@@ -42,4 +42,37 @@ Tanpa langkah 3 aplikasi tetap bisa dibuild; fitur ini menampilkan "Firebase bel
 - Pengiriman otomatis lewat WorkManager tiap 3 jam, hanya saat ada internet. Jadwal disamakan dengan setelan
   setiap aplikasi dibuka (aman setelah restore backup). Gagal sementara diulang maksimal 3 kali per putaran.
 - Sebelum menyalakan: pilih **cabang aktif** di menu Outlet / Cabang, karena kode outlet itulah identitas cabang di rekap.
-- Dashboard web untuk admin (Vercel) dikerjakan terpisah di folder `web-dashboard/`.
+- Dashboard web untuk admin (Nada Pantau) ada di repo terpisah dan di-deploy ke Vercel.
+
+## Tahap 3A - pendaftaran toko sendiri dan undangan cabang (aturan Firestore)
+Tanpa Cloud Functions (tetap paket gratis Spark). Semua dijaga `firebase/firestore.rules`.
+
+### Peta data
+| Dokumen | Dibuat oleh | Isi |
+|---|---|---|
+| `aktivasi/{KODE}` | **kamu** (pengembang), lewat Firebase Console | `aktif` (boolean), `batasCabang` (number); `dipakaiOleh` dan `dipakaiPada` diisi otomatis saat dipakai |
+| `toko/{uid pemilik}` | pemilik, saat mendaftar di dashboard | `nama`, `aktif`, `batasCabang`, `kodeAktivasi`, `dibuatPada` |
+| `undangan/{KODE10}` | pemilik, di dashboard | `tokoId`, `kodeDokumen`, `namaCabang`, `berlakuSampai`, `dibuatPada`; `dipakaiOleh`, `dipakaiPada` diisi saat dipakai |
+| `toko/{id}/anggota/{uid}` | cabang saat bergabung, atau pemilik manual | `peran`, `kodeDokumen`, (`undangan`, `namaCabang`, `bergabungPada`) |
+| `toko/{id}/rekap/{tanggal}_{kodeDokumen}` | HP cabang | seperti sebelumnya |
+
+### Membuat Kode Aktivasi (satu per toko yang kamu jual)
+Firebase Console -> Firestore -> **Start collection** `aktivasi` (huruf kecil) -> Document ID = kode, **HURUF BESAR tanpa spasi**, 10 karakter acak (mis. `K7M2QX9PTR`) -> field:
+- `aktif` = boolean `true`
+- `batasCabang` = **number** (mis. `3`), bukan string
+
+Jangan isi `dipakaiOleh`. Kode hanya bisa dipakai sekali. Beri kode itu ke pelanggan setelah mereka membayar.
+
+### Menonaktifkan toko yang berhenti berlangganan
+Firestore -> `toko` -> dokumen toko itu -> ubah `aktif` menjadi boolean `false`. Sejak itu tidak ada rekap baru yang bisa masuk, dan undangan baru ditolak. Data lama tetap ada dan tetap bisa dibaca pemilik. Untuk mengaktifkan lagi, ubah kembali ke `true`.
+
+### Toko yang sudah dibuat manual (Tahap 1-2)
+Tetap jalan tanpa perubahan, **asal dokumen `toko/{UID admin}` ada** (sekarang dibutuhkan; sebelumnya tidak). Field `aktif` yang tidak ada dianggap aktif.
+
+### Hal yang sengaja belum ditegakkan
+- `batasCabang` hanya ditegakkan di tampilan dashboard, belum di aturan Firestore.
+- Akun anonim cabang hilang bila aplikasi dihapus atau datanya dibersihkan. Pemilik membuat undangan baru dengan kode cabang yang sama, lalu mencabut akun lama; riwayat rekap tetap menyambung karena kode cabang sama.
+
+### Menguji aturan
+Otomatis: setiap push yang mengubah folder `firebase/` menjalankan workflow **Uji aturan Firestore** (tab Actions). Hijau berarti semua skenario lolos.
+Lokal: `cd firebase/test && npm install && npx firebase emulators:exec --only firestore --project demo-nadapos "npm test"` (butuh Java 21).

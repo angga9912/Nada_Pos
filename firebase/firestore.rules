@@ -1,67 +1,203 @@
 rules_version = '2';
 
-// Aturan keamanan modul Pantau Cabang (Nada Pos).
+// Aturan keamanan Nada Pos - Pantau Cabang (Tahap 3A: pendaftaran toko & undangan cabang).
 //
-// Struktur data:
-//   toko/{tokoId}                      -> tokoId = uid akun Firebase milik admin/pemilik toko
-//   toko/{tokoId}/anggota/{uid}        -> daftar akun yang boleh mengakses toko ini
-//        { peran: "ADMIN" | "CABANG", kodeDokumen: "CBG-01" (wajib untuk CABANG) }
-//   toko/{tokoId}/rekap/{tanggal}_{kodeDokumen}  -> rekap harian satu cabang
+// STRUKTUR DATA
+//   aktivasi/{KODE}                 -> dibuat PENGEMBANG lewat Firebase Console, satu kode per toko yang dijual.
+//        { aktif: bool, batasCabang: number, dipakaiOleh: uid | kosong, dipakaiPada: timestamp }
+//   toko/{tokoId}                   -> tokoId = uid akun pemilik. Dibuat pemilik saat mendaftar (butuh kode aktivasi).
+//        { nama, aktif, batasCabang, kodeAktivasi, dibuatPada }
+//        Toko lama tanpa field "aktif" dianggap aktif (kompatibel dengan setup manual Tahap 1-2).
+//   toko/{tokoId}/anggota/{uid}     -> akun yang boleh menulis rekap toko ini.
+//        { peran: "ADMIN" | "CABANG", kodeDokumen, [undangan, namaCabang, bergabungPada] }
+//   toko/{tokoId}/rekap/{yyyy-MM-dd}_{kodeDokumen} -> rekap harian satu cabang
+//   undangan/{KODE10}               -> dibuat pemilik di dashboard, sekali pakai, berlaku maksimal 7 hari.
+//        { tokoId, kodeDokumen, namaCabang, berlakuSampai, dibuatPada, dipakaiOleh, dipakaiPada }
 //
-// Hak akses:
-//   - Pemilik (uid == tokoId) dan anggota ber-peran ADMIN: baca & kelola semuanya.
-//   - Anggota ber-peran CABANG: hanya boleh MENULIS rekap miliknya sendiri (id dokumen harus berakhiran
-//     kodeDokumen-nya), dan tidak boleh membaca rekap cabang lain.
-//   - Selain itu (belum login / bukan anggota): ditolak.
+// POLA KLAIM (tanpa server)
+//   Pendaftaran toko  : satu batch menulis toko/{uid} DAN menandai aktivasi/{kode}.dipakaiOleh = uid.
+//   Cabang bergabung  : satu batch menulis toko/{id}/anggota/{uid} DAN menandai undangan/{kode}.dipakaiOleh = uid.
+//   Aturan tiap sisi memeriksa sisi lainnya dengan getAfter(), jadi keduanya harus ikut dalam batch yang sama,
+//   dan kode yang sudah dipakai tidak bisa dipakai lagi.
 //
-// BELUM DIUJI di emulator. Sebelum dipakai pelanggan: uji lewat tab "Rules Playground" di Firebase Console.
+// BATAS YANG DISENGAJA
+//   - Batas jumlah cabang (batasCabang) hanya ditegakkan di tampilan dashboard, bukan di aturan ini.
+//   - Akun anonim cabang hilang bila aplikasi dihapus; pemilik membuat undangan baru dengan kodeDokumen yang sama.
+//
+// Uji: firebase/test (jalan otomatis di GitHub Actions, workflow "Uji aturan Firestore").
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ---------- fungsi bantu ----------
+
+    function masuk() {
+      return request.auth != null;
+    }
+    function pathToko(tokoId) {
+      return /databases/$(database)/documents/toko/$(tokoId);
+    }
+    function pathAnggota(tokoId, uid) {
+      return /databases/$(database)/documents/toko/$(tokoId)/anggota/$(uid);
+    }
+    function pathAktivasi(kode) {
+      return /databases/$(database)/documents/aktivasi/$(kode);
+    }
+    function pathUndangan(kode) {
+      return /databases/$(database)/documents/undangan/$(kode);
+    }
+
+    // Toko harus sudah terdaftar dan tidak dinonaktifkan. Field "aktif" yang tidak ada = aktif.
+    function tokoAktif(tokoId) {
+      return exists(pathToko(tokoId))
+        && get(pathToko(tokoId)).data.get('aktif', true) == true;
+    }
+    function pemilik(tokoId) {
+      return masuk() && request.auth.uid == tokoId;
+    }
+    function anggotaAda(tokoId) {
+      return masuk() && exists(pathAnggota(tokoId, request.auth.uid));
+    }
+    function adminAnggota(tokoId) {
+      return anggotaAda(tokoId) && get(pathAnggota(tokoId, request.auth.uid)).data.peran == 'ADMIN';
+    }
+    function admin(tokoId) {
+      return pemilik(tokoId) || adminAnggota(tokoId);
+    }
+    // Cabang boleh menulis rekap hanya untuk kodeDokumen miliknya. Satu get() saja; bila dokumen anggota
+    // tidak ada, get() gagal dan aturan menolak.
+    function bolehTulisRekap(tokoId, rekapId) {
+      let a = get(pathAnggota(tokoId, request.auth.uid)).data;
+      return a.peran == 'CABANG'
+        && a.kodeDokumen is string
+        // id dokumen = "yyyy-MM-dd_" + kodeDokumen milik akun ini
+        && rekapId.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}_' + a.kodeDokumen + '$')
+        && request.resource.data.kodeDokumen == a.kodeDokumen
+        && request.resource.data.tanggal is string;
+    }
+
+    // Cabang bergabung: dokumen anggota dibuat sendiri oleh akun cabang, hanya bila undangannya
+    // sah (ada, milik toko ini, belum dipakai, belum kedaluwarsa) dan ditandai terpakai dalam batch yang sama.
+    function bergabungLewatUndangan(tokoId, uid) {
+      let d = request.resource.data;
+      let u = get(pathUndangan(d.undangan)).data;
+      return masuk()
+        && request.auth.uid == uid
+        && d.keys().hasOnly(['peran', 'kodeDokumen', 'undangan', 'namaCabang', 'bergabungPada'])
+        && d.peran == 'CABANG'
+        && d.undangan is string
+        && d.bergabungPada == request.time
+        && u.tokoId == tokoId
+        && u.get('dipakaiOleh', null) == null
+        && request.time < u.berlakuSampai
+        && d.kodeDokumen == u.kodeDokumen
+        && d.namaCabang == u.namaCabang
+        && getAfter(pathUndangan(d.undangan)).data.dipakaiOleh == uid
+        && tokoAktif(tokoId);
+    }
+
+    // Kode aktivasi sah: ada, aktif, belum dipakai, batas cabang sama, dan ditandai dipakai oleh [uid] dalam batch yang sama.
+    function kodeAktivasiSah(kode, uid, batasCabang) {
+      let a = get(pathAktivasi(kode)).data;
+      return a.aktif == true
+        && a.get('dipakaiOleh', null) == null
+        && a.batasCabang == batasCabang
+        && getAfter(pathAktivasi(kode)).data.dipakaiOleh == uid;
+    }
+
+    // ---------- kode aktivasi (dibuat pengembang lewat Console) ----------
+
+    match /aktivasi/{kode} {
+      // Tidak ada yang boleh membaca atau membuat dari aplikasi/dashboard. Pendaftar hanya boleh
+      // "mengklaim" kode lewat update di bawah, sebagai bagian dari batch pendaftaran toko.
+      allow read, create, delete: if false;
+
+      allow update: if masuk()
+        && resource.data.aktif == true
+        && resource.data.get('dipakaiOleh', null) == null
+        && request.resource.data.dipakaiOleh == request.auth.uid
+        && request.resource.data.dipakaiPada == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dipakaiOleh', 'dipakaiPada'])
+        // pasangannya: toko milik akun ini dibuat dalam batch yang sama dan menyebut kode ini
+        && getAfter(pathToko(request.auth.uid)).data.kodeAktivasi == kode;
+    }
+
+    // ---------- undangan cabang ----------
+
+    match /undangan/{kode} {
+      // Hanya bisa dibaca satu per satu bila kodenya diketahui (kode 10 karakter acak). Daftar tidak boleh,
+      // kecuali pemilik melihat undangannya sendiri (query where tokoId == uid).
+      allow get: if masuk();
+      allow list: if masuk() && resource.data.tokoId == request.auth.uid;
+
+      allow create: if masuk()
+        && kode.matches('^[A-Za-z0-9]{10}$')
+        && request.resource.data.keys().hasOnly(['tokoId', 'kodeDokumen', 'namaCabang', 'berlakuSampai', 'dibuatPada'])
+        && request.resource.data.tokoId is string
+        && admin(request.resource.data.tokoId)
+        && tokoAktif(request.resource.data.tokoId)
+        && request.resource.data.kodeDokumen is string
+        && request.resource.data.kodeDokumen.matches('^[A-Z0-9_-]{1,30}$')
+        && request.resource.data.namaCabang is string
+        && request.resource.data.namaCabang.size() >= 1
+        && request.resource.data.namaCabang.size() <= 60
+        && request.resource.data.dibuatPada == request.time
+        && request.resource.data.berlakuSampai is timestamp
+        && request.resource.data.berlakuSampai > request.time
+        && request.resource.data.berlakuSampai <= request.time + duration.value(7, 'd');
+
+      // Cabang mengklaim undangan: hanya mengisi dipakaiOleh/dipakaiPada, dan dokumen anggotanya dibuat di batch yang sama.
+      allow update: if masuk()
+        && resource.data.get('dipakaiOleh', null) == null
+        && request.time < resource.data.berlakuSampai
+        && request.resource.data.dipakaiOleh == request.auth.uid
+        && request.resource.data.dipakaiPada == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dipakaiOleh', 'dipakaiPada'])
+        && getAfter(pathAnggota(resource.data.tokoId, request.auth.uid)).data.undangan == kode
+        && tokoAktif(resource.data.tokoId);
+
+      // Pemilik/admin boleh membatalkan undangan.
+      allow delete: if admin(resource.data.tokoId);
+    }
+
+    // ---------- toko ----------
+
     match /toko/{tokoId} {
+      // Hanya admin yang membaca dokumen toko. Daftar toko tidak boleh.
+      allow get: if admin(tokoId);
+      allow list: if false;
 
-      function masuk() {
-        return request.auth != null;
-      }
-      function pemilik() {
-        return masuk() && request.auth.uid == tokoId;
-      }
-      function anggotaPath() {
-        return /databases/$(database)/documents/toko/$(tokoId)/anggota/$(request.auth.uid);
-      }
-      function anggotaAda() {
-        return masuk() && exists(anggotaPath());
-      }
-      function dataAnggota() {
-        return get(anggotaPath()).data;
-      }
-      function admin() {
-        return pemilik() || (anggotaAda() && dataAnggota().peran == 'ADMIN');
-      }
-      function cabang() {
-        return anggotaAda() && dataAnggota().peran == 'CABANG' && dataAnggota().kodeDokumen is string;
-      }
+      // Pendaftaran: pemilik membuat toko di path uid-nya sendiri, dengan kode aktivasi yang sah dan belum dipakai.
+      allow create: if pemilik(tokoId)
+        && request.resource.data.keys().hasOnly(['nama', 'aktif', 'batasCabang', 'kodeAktivasi', 'dibuatPada'])
+        && request.resource.data.nama is string
+        && request.resource.data.nama.size() >= 1
+        && request.resource.data.nama.size() <= 60
+        && request.resource.data.aktif == true
+        && request.resource.data.kodeAktivasi is string
+        && request.resource.data.dibuatPada == request.time
+        && kodeAktivasiSah(request.resource.data.kodeAktivasi, request.auth.uid, request.resource.data.batasCabang);
 
-      // Dokumen toko itu sendiri tidak dipakai; ditutup supaya tidak ada yang bisa menulis sembarangan.
-      allow read, write: if false;
+      // Pemilik hanya boleh mengganti nama toko. Status aktif dan batas cabang hanya bisa diubah pengembang (Console).
+      allow update: if pemilik(tokoId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nama'])
+        && request.resource.data.nama is string
+        && request.resource.data.nama.size() >= 1
+        && request.resource.data.nama.size() <= 60;
+
+      allow delete: if false;
 
       match /anggota/{uid} {
-        // Anggota boleh membaca catatan dirinya sendiri; admin boleh melihat & mengelola semua anggota.
-        allow read: if masuk() && (request.auth.uid == uid || admin());
-        allow create, update, delete: if admin();
+        allow read: if masuk() && (request.auth.uid == uid || admin(tokoId));
+        allow create: if (admin(tokoId) && tokoAktif(tokoId)) || bergabungLewatUndangan(tokoId, uid);
+        allow update: if admin(tokoId) && tokoAktif(tokoId);
+        allow delete: if admin(tokoId);
       }
 
       match /rekap/{rekapId} {
-        allow read: if admin();
-        allow delete: if admin();
+        allow read, delete: if admin(tokoId);
 
-        allow create, update: if admin()
-          || (
-            cabang()
-            // id dokumen = "yyyy-MM-dd_" + kodeDokumen milik akun ini
-            && rekapId.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}_' + dataAnggota().kodeDokumen + '$')
-            && request.resource.data.kodeDokumen == dataAnggota().kodeDokumen
-            && request.resource.data.tanggal is string
-          );
+        allow create, update: if tokoAktif(tokoId)
+          && (admin(tokoId) || bolehTulisRekap(tokoId, rekapId));
       }
     }
   }
