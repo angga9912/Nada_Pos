@@ -1,4 +1,4 @@
-# Pantau Cabang (Firebase) - Tahap 1, 2, dan 3A
+# Pantau Cabang (Firebase) - Tahap 1, 2, 3A, dan 3B
 
 Admin memantau rekap penjualan harian semua cabang dari jarak jauh. Tiap cabang = satu HP.
 Hanya paket **Pro** (`FiturPaket.PANTAU_CABANG`). Aplikasi tetap offline-first: kasir tidak pernah menunggu internet.
@@ -76,3 +76,16 @@ Tetap jalan tanpa perubahan, **asal dokumen `toko/{UID admin}` ada** (sekarang d
 ### Menguji aturan
 Otomatis: setiap push yang mengubah folder `firebase/` menjalankan workflow **Uji aturan Firestore** (tab Actions). Hijau berarti semua skenario lolos.
 Lokal: `cd firebase/test && npm install && npx firebase emulators:exec --only firestore --project demo-nadapos "npm test"` (butuh Java 21).
+
+## Tahap 3B - HP cabang bergabung lewat kode undangan (aplikasi)
+Cara baru yang menggantikan pembuatan akun email per cabang di Firebase Console (cara lama tetap bisa dipakai).
+
+1. Pemilik membuka dashboard Nada Pantau > **Kelola cabang** > isi nama dan kode cabang > **Buat undangan**, lalu memberikan kode 10 karakter ke pengelola cabang (berlaku 7 hari, sekali pakai).
+2. Di HP cabang: **Pengaturan > Pantau Cabang > Gabung dengan kode undangan** > masukkan kode > **Gabung**. HP masuk sebagai akun anonim, membuat dokumen anggota CABANG, dan menandai undangan terpakai dalam satu batch. Kirim rekap otomatis langsung menyala.
+3. Identitas cabang di rekap (`kodeDokumen`, `namaCabang`) diambil dari undangan, **bukan** dari outlet aktif HP. Aturan Firestore mewajibkan `kodeDokumen` rekap sama dengan dokumen anggota.
+4. **Lepas HP dari toko** menghapus identitas cabang dan keluar dari akun anonim. Akun anonim yang sudah keluar tidak bisa dipulihkan; untuk menyambungkan HP lagi, pemilik cukup membuat undangan baru dengan kode cabang yang sama (cabut akses yang lama dulu di Kelola cabang).
+5. HP yang diganti atau data aplikasi yang terhapus kehilangan akun anonimnya. Pemilik mencabut akses lama di Kelola cabang, lalu membuat undangan baru.
+
+### Syarat sekali jalan
+- Firebase Console > Authentication > Sign-in method > aktifkan **Anonymous**.
+- Aturan Firestore terbaru (`firebase/firestore.rules`) sudah dipublikasikan.

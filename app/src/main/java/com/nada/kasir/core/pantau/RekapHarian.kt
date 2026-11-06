@@ -136,6 +136,20 @@ object RekapHarianLogic {
         return null
     }
 
+    private val POLA_KODE_UNDANGAN = Regex("^[A-Za-z0-9]{10}$")
+
+    /** Rapikan kode undangan hasil ketik/tempel: buang spasi dan tanda hubung, jadikan huruf besar. */
+    fun bersihkanKodeUndangan(mentah: String): String =
+        mentah.filterNot { it.isWhitespace() || it == '-' }.uppercase()
+
+    /** Null bila kode undangan (10 huruf/angka) valid, selain itu pesan untuk pengguna. */
+    fun validasiKodeUndangan(mentah: String): String? {
+        val k = bersihkanKodeUndangan(mentah)
+        if (k.isEmpty()) return "Kode undangan wajib diisi."
+        if (!POLA_KODE_UNDANGAN.matches(k)) return "Kode undangan terdiri dari 10 huruf dan angka. Periksa lagi penulisannya."
+        return null
+    }
+
     /** Gabungan beberapa rekap (mis. semua cabang di satu hari) untuk tampilan admin. */
     fun totalPenjualan(daftar: List<RekapHarian>): Double = daftar.sumOf { it.totalPenjualan }
     fun totalTransaksi(daftar: List<RekapHarian>): Int = daftar.sumOf { it.jumlahTransaksi }

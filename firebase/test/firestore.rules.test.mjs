@@ -182,9 +182,9 @@ describe('pendaftaran toko dengan kode aktivasi', () => {
     await assertFails(daftar(dbTamu(), PENDAFTAR, 'BARU000001'));
   });
 
-  it('kode aktivasi tidak bisa dibaca, dibuat, atau didaftar dari klien', async () => {
+  it('kode aktivasi hanya bisa dibaca per kode; tidak bisa didaftar, dibuat, atau dihapus dari klien', async () => {
     const db = dbOf(PENDAFTAR);
-    await assertFails(getDoc(doc(db, 'aktivasi', 'BARU000001')));
+    await assertSucceeds(getDoc(doc(db, 'aktivasi', 'BARU000001'))); // get per kode boleh (untuk membaca batasCabang)
     await assertFails(getDocs(collection(db, 'aktivasi')));
     await assertFails(setDoc(doc(db, 'aktivasi', 'BUATSENDIRI'), { aktif: true, batasCabang: 999 }));
     await assertFails(deleteDoc(doc(db, 'aktivasi', 'BARU000001')));

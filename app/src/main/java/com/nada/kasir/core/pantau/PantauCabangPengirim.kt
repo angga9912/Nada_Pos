@@ -47,7 +47,13 @@ class PantauCabangPengirim @Inject constructor(
         val outlet = outletRepository.observeOutletAktifEfektif().first()
         var terkirim = 0
         for (tanggal in RekapHarianLogic.tanggalUntukDikirim(hariIni)) {
-            val rekap = builder.bangun(tanggal, outlet, zona)
+            val dasar = builder.bangun(tanggal, outlet, zona)
+            // Cabang lewat undangan: kodeDokumen WAJIB sama dengan dokumen anggota (aturan Firestore), bukan kode outlet.
+            val rekap = if (konfig.bergabungLewatUndangan) dasar.copy(
+                kodeCabang = konfig.kodeDokumen,
+                kodeDokumen = konfig.kodeDokumen,
+                namaCabang = konfig.namaCabang.ifBlank { konfig.kodeDokumen }
+            ) else dasar
             when (val hasil = repository.kirim(konfig.tokoId, rekap)) {
                 is Result.Success -> terkirim++
                 is Result.Failure -> {

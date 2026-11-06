@@ -5,6 +5,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
@@ -24,7 +25,11 @@ object PantauCabangPath {
     const val TOKO = "toko"
     const val REKAP = "rekap"
     const val ANGGOTA = "anggota"
+    const val UNDANGAN = "undangan"
 }
+
+/** Hasil bergabung lewat undangan: toko dan identitas cabang yang ditetapkan pemilik. */
+data class HasilGabung(val tokoId: String, val kodeDokumen: String, val namaCabang: String)
 
 /**
  * Satu-satunya pintu ke Firebase untuk modul Pantau Cabang. Semua fungsi aman dipanggil walau
@@ -43,6 +48,7 @@ class PantauCabangRepository @Inject constructor(
     fun firebaseSiap(): Boolean = FirebaseApp.getApps(context).isNotEmpty()
 
     fun uidSaatIni(): String? = if (firebaseSiap()) FirebaseAuth.getInstance().currentUser?.uid else null
+    fun akunAnonim(): Boolean = firebaseSiap() && FirebaseAuth.getInstance().currentUser?.isAnonymous == true
     fun emailSaatIni(): String? = if (firebaseSiap()) FirebaseAuth.getInstance().currentUser?.email else null
 
     suspend fun masuk(email: String, password: String): Result<String> = amankan {
@@ -53,6 +59,58 @@ class PantauCabangRepository @Inject constructor(
         }
         val uid = hasil.user?.uid ?: return@amankan gagal("Login gagal. Silakan coba lagi.")
         Result.Success(uid)
+    }
+
+    /**
+     * Bergabung ke toko lewat kode undangan dari pemilik: masuk anonim (tanpa email/password), lalu dalam
+     * SATU batch membuat dokumen anggota CABANG dan menandai undangan terpakai (sesuai firestore.rules).
+     * Idempotent: bila HP ini sudah pernah memakai undangan yang sama, hasilnya sukses tanpa menulis ulang.
+     */
+    suspend fun gabung(kodeMentah: String): Result<HasilGabung> = amankan {
+        if (!firebaseSiap()) return@amankan gagal(PESAN_FIREBASE_BELUM_SIAP)
+        RekapHarianLogic.validasiKodeUndangan(kodeMentah)?.let { return@amankan gagal(it) }
+        val kode = RekapHarianLogic.bersihkanKodeUndangan(kodeMentah)
+        val auth = FirebaseAuth.getInstance()
+        val pengguna = auth.currentUser
+        if (pengguna != null && !pengguna.isAnonymous) {
+            return@amankan gagal("Akun email sedang masuk di HP ini. Tekan Keluar dulu, lalu gabung dengan kode undangan.")
+        }
+        val uid = pengguna?.uid ?: try {
+            withTimeout(BATAS_WAKTU_MS) { auth.signInAnonymously().await() }.user?.uid
+        } catch (e: FirebaseAuthException) {
+            return@amankan gagal("HP ini belum bisa disiapkan untuk bergabung. Hubungi penjual Nada Pos.")
+        } ?: return@amankan gagal("HP ini belum bisa disiapkan untuk bergabung. Coba lagi.")
+
+        val db = FirebaseFirestore.getInstance()
+        val refUndangan = db.collection(PantauCabangPath.UNDANGAN).document(kode)
+        val u = withTimeout(BATAS_WAKTU_MS) { refUndangan.get().await() }
+        if (!u.exists()) return@amankan gagal("Kode undangan tidak ditemukan. Periksa penulisannya.")
+        val tokoId = u.getString("tokoId").orEmpty()
+        val kodeDokumen = u.getString("kodeDokumen").orEmpty()
+        val namaCabang = u.getString("namaCabang").orEmpty()
+        if (tokoId.isEmpty() || kodeDokumen.isEmpty()) return@amankan gagal("Kode undangan tidak valid.")
+        val refAnggota = db.collection(PantauCabangPath.TOKO).document(tokoId)
+            .collection(PantauCabangPath.ANGGOTA).document(uid)
+
+        val pemakai = u.getString("dipakaiOleh")
+        if (pemakai != null) {
+            if (pemakai != uid) return@amankan gagal("Kode undangan ini sudah dipakai. Minta pemilik toko membuat undangan baru.")
+            val masihAnggota = withTimeout(BATAS_WAKTU_MS) { refAnggota.get().await() }.exists()
+            return@amankan if (masihAnggota) Result.Success(HasilGabung(tokoId, kodeDokumen, namaCabang))
+            else gagal("Akses HP ini sudah dicabut pemilik toko. Minta undangan baru.")
+        }
+        val berlakuSampai = u.getTimestamp("berlakuSampai")?.toDate()?.time ?: 0L
+        if (berlakuSampai <= System.currentTimeMillis()) {
+            return@amankan gagal("Kode undangan sudah kedaluwarsa. Minta pemilik toko membuat undangan baru.")
+        }
+        val batch = db.batch()
+        batch.set(refAnggota, mapOf(
+            "peran" to "CABANG", "kodeDokumen" to kodeDokumen, "undangan" to kode,
+            "namaCabang" to namaCabang, "bergabungPada" to FieldValue.serverTimestamp()
+        ))
+        batch.update(refUndangan, mapOf("dipakaiOleh" to uid, "dipakaiPada" to FieldValue.serverTimestamp()))
+        withTimeout(BATAS_WAKTU_MS) { batch.commit().await() }
+        Result.Success(HasilGabung(tokoId, kodeDokumen, namaCabang))
     }
 
     fun keluar() {
@@ -117,7 +175,7 @@ class PantauCabangRepository @Inject constructor(
         is FirebaseAuthException -> "Email atau password salah, atau akun belum terdaftar."
         is FirebaseFirestoreException ->
             if (e.code == FirebaseFirestoreException.Code.PERMISSION_DENIED)
-                "Akun ini belum diizinkan untuk toko tersebut. Minta admin menambahkan akun Anda sebagai anggota."
+                "Akses ditolak. Kode undangan mungkin baru dipakai orang lain, akses HP ini sudah dicabut, atau toko dinonaktifkan. Hubungi pemilik toko."
             else "Gagal terhubung ke server. Coba lagi nanti."
         else -> "Gagal terhubung ke server. Coba lagi nanti."
     }

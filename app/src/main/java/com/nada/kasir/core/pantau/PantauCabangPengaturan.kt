@@ -11,6 +11,8 @@ private const val KEY_PANTAU_AKTIF = "pantau_aktif"
 private const val KEY_PANTAU_TOKO_ID = "pantau_toko_id"
 private const val KEY_PANTAU_TERAKHIR_KIRIM = "pantau_terakhir_kirim"
 private const val KEY_PANTAU_STATUS = "pantau_status_terakhir"
+private const val KEY_PANTAU_KODE_DOKUMEN = "pantau_kode_dokumen"
+private const val KEY_PANTAU_NAMA_CABANG = "pantau_nama_cabang"
 
 /** Setelan modul Pantau Cabang per HP (disimpan di tabel settings, seperti fitur lain). */
 @Singleton
@@ -23,8 +25,13 @@ class PantauCabangPengaturan @Inject constructor(
         /** Waktu (epoch millis) terakhir rekap berhasil terkirim; null = belum pernah. */
         val terakhirKirim: Long? = null,
         /** Pesan kegagalan pengiriman terakhir; null bila pengiriman terakhir berhasil. */
-        val pesanTerakhir: String? = null
+        val pesanTerakhir: String? = null,
+        /** Identitas cabang dari undangan; kosong = HP belum bergabung lewat undangan (pakai identitas outlet). */
+        val kodeDokumen: String = "",
+        val namaCabang: String = ""
     ) {
+        val bergabungLewatUndangan: Boolean get() = kodeDokumen.isNotBlank()
+
         /** Siap dipakai mengirim: dinyalakan dan kode toko valid. */
         val siapKirim: Boolean get() = aktif && RekapHarianLogic.validasiTokoId(tokoId) == null
     }
@@ -35,7 +42,9 @@ class PantauCabangPengaturan @Inject constructor(
             aktif = nilai(KEY_PANTAU_AKTIF) == "true",
             tokoId = nilai(KEY_PANTAU_TOKO_ID).orEmpty(),
             terakhirKirim = nilai(KEY_PANTAU_TERAKHIR_KIRIM)?.toLongOrNull(),
-            pesanTerakhir = nilai(KEY_PANTAU_STATUS)?.takeIf { it.isNotBlank() }
+            pesanTerakhir = nilai(KEY_PANTAU_STATUS)?.takeIf { it.isNotBlank() },
+            kodeDokumen = nilai(KEY_PANTAU_KODE_DOKUMEN).orEmpty(),
+            namaCabang = nilai(KEY_PANTAU_NAMA_CABANG).orEmpty()
         )
     }
 
@@ -43,12 +52,32 @@ class PantauCabangPengaturan @Inject constructor(
         aktif = settingDao.get(KEY_PANTAU_AKTIF) == "true",
         tokoId = settingDao.get(KEY_PANTAU_TOKO_ID).orEmpty(),
         terakhirKirim = settingDao.get(KEY_PANTAU_TERAKHIR_KIRIM)?.toLongOrNull(),
-        pesanTerakhir = settingDao.get(KEY_PANTAU_STATUS)?.takeIf { it.isNotBlank() }
+        pesanTerakhir = settingDao.get(KEY_PANTAU_STATUS)?.takeIf { it.isNotBlank() },
+        kodeDokumen = settingDao.get(KEY_PANTAU_KODE_DOKUMEN).orEmpty(),
+        namaCabang = settingDao.get(KEY_PANTAU_NAMA_CABANG).orEmpty()
     )
 
     suspend fun simpan(aktif: Boolean, tokoId: String) {
         settingDao.upsert(SettingEntity(key = KEY_PANTAU_AKTIF, value = aktif.toString()))
         settingDao.upsert(SettingEntity(key = KEY_PANTAU_TOKO_ID, value = tokoId.trim()))
+    }
+
+    /** Berhasil bergabung lewat undangan: simpan toko + identitas cabang, dan nyalakan kirim otomatis. */
+    suspend fun simpanGabung(tokoId: String, kodeDokumen: String, namaCabang: String) {
+        settingDao.upsert(SettingEntity(key = KEY_PANTAU_AKTIF, value = "true"))
+        settingDao.upsert(SettingEntity(key = KEY_PANTAU_TOKO_ID, value = tokoId.trim()))
+        settingDao.upsert(SettingEntity(key = KEY_PANTAU_KODE_DOKUMEN, value = kodeDokumen))
+        settingDao.upsert(SettingEntity(key = KEY_PANTAU_NAMA_CABANG, value = namaCabang))
+        settingDao.upsert(SettingEntity(key = KEY_PANTAU_STATUS, value = ""))
+    }
+
+    /** HP dilepas dari toko: matikan pengiriman dan hapus identitas cabang + kode toko. */
+    suspend fun lepaskan() {
+        settingDao.upsert(SettingEntity(key = KEY_PANTAU_AKTIF, value = "false"))
+        settingDao.upsert(SettingEntity(key = KEY_PANTAU_TOKO_ID, value = ""))
+        settingDao.upsert(SettingEntity(key = KEY_PANTAU_KODE_DOKUMEN, value = ""))
+        settingDao.upsert(SettingEntity(key = KEY_PANTAU_NAMA_CABANG, value = ""))
+        settingDao.upsert(SettingEntity(key = KEY_PANTAU_STATUS, value = ""))
     }
 
     suspend fun catatKirim(waktu: Long) {

@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -63,12 +64,17 @@ data class PantauCabangUiState(
     val konfigurasi: PantauCabangPengaturan.Konfigurasi = PantauCabangPengaturan.Konfigurasi(),
     val firebaseSiap: Boolean = true,
     val emailMasuk: String? = null,
+    /** Ada akun Firebase yang masuk (email ATAU anonim hasil undangan). */
+    val sudahMasuk: Boolean = false,
+    val akunAnonim: Boolean = false,
     /** Identitas cabang HP ini (outlet aktif); null bila belum ada outlet aktif. */
     val namaCabang: String? = null,
     val kodeCabang: String? = null,
     val sibuk: Boolean = false,
     val pesan: String? = null
 )
+
+private data class Akun(val email: String?, val masuk: Boolean, val anonim: Boolean)
 
 @HiltViewModel
 class PantauCabangViewModel @Inject constructor(
@@ -79,21 +85,24 @@ class PantauCabangViewModel @Inject constructor(
     outletRepository: OutletRepository
 ) : ViewModel() {
 
-    private val emailFlow = MutableStateFlow(repository.emailSaatIni())
+    private fun akunSaatIni() = Akun(repository.emailSaatIni(), repository.uidSaatIni() != null, repository.akunAnonim())
+    private val akunFlow = MutableStateFlow(akunSaatIni())
     private val sibukFlow = MutableStateFlow(false)
     private val pesanFlow = MutableStateFlow<String?>(null)
 
     val uiState: StateFlow<PantauCabangUiState> = combine(
         pengaturan.observe(),
         outletRepository.observeOutletAktifEfektif(),
-        emailFlow,
+        akunFlow,
         sibukFlow,
         pesanFlow
-    ) { konfig, outlet, email, sibuk, pesan ->
+    ) { konfig, outlet, akun, sibuk, pesan ->
         PantauCabangUiState(
             konfigurasi = konfig,
             firebaseSiap = repository.firebaseSiap(),
-            emailMasuk = email,
+            emailMasuk = akun.email,
+            sudahMasuk = akun.masuk,
+            akunAnonim = akun.anonim,
             namaCabang = outlet?.nama,
             kodeCabang = outlet?.kode,
             sibuk = sibuk,
@@ -108,7 +117,7 @@ class PantauCabangViewModel @Inject constructor(
             sibukFlow.value = true
             when (val hasil = repository.masuk(email, password)) {
                 is Result.Success -> {
-                    emailFlow.value = repository.emailSaatIni()
+                    akunFlow.value = akunSaatIni()
                     pesanFlow.value = "Berhasil masuk."
                 }
                 is Result.Failure -> pesanFlow.value = hasil.error.pesan
@@ -119,8 +128,36 @@ class PantauCabangViewModel @Inject constructor(
 
     fun keluar() {
         repository.keluar()
-        emailFlow.value = null
+        akunFlow.value = akunSaatIni()
         pesanFlow.value = "Anda sudah keluar dari akun Firebase."
+    }
+
+    /** Gabung ke toko lewat kode undangan dari pemilik (akun anonim, tanpa email/password). */
+    fun gabung(kode: String) {
+        viewModelScope.launch {
+            sibukFlow.value = true
+            when (val hasil = repository.gabung(kode)) {
+                is Result.Success -> {
+                    pengaturan.simpanGabung(hasil.data.tokoId, hasil.data.kodeDokumen, hasil.data.namaCabang)
+                    PantauCabangScheduler.jadwalkan(context)
+                    akunFlow.value = akunSaatIni()
+                    pesanFlow.value = "HP ini sudah terhubung ke ${hasil.data.namaCabang}. Rekap dikirim otomatis saat ada internet."
+                }
+                is Result.Failure -> pesanFlow.value = hasil.error.pesan
+            }
+            sibukFlow.value = false
+        }
+    }
+
+    /** Lepas HP dari toko: hentikan pengiriman, hapus identitas cabang, keluar dari akun anonim. */
+    fun lepaskan() {
+        viewModelScope.launch {
+            PantauCabangScheduler.batalkan(context)
+            pengaturan.lepaskan()
+            repository.keluar()
+            akunFlow.value = akunSaatIni()
+            pesanFlow.value = "HP ini sudah dilepas dari toko."
+        }
     }
 
     /** Saklar "kirim otomatis": butuh kode toko valid saat dinyalakan; menyesuaikan jadwal WorkManager. */
@@ -182,6 +219,9 @@ fun PantauCabangScreen(viewModel: PantauCabangViewModel = hiltViewModel()) {
     var tokoId by remember(state.konfigurasi.tokoId) { mutableStateOf(state.konfigurasi.tokoId) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var kodeUndangan by remember { mutableStateOf("") }
+    var konfirmasiLepas by remember { mutableStateOf(false) }
+    val lewatUndangan = state.konfigurasi.bergabungLewatUndangan
 
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
         Column(
@@ -216,7 +256,9 @@ fun PantauCabangScreen(viewModel: PantauCabangViewModel = hiltViewModel()) {
                 Column(Modifier.padding(12.dp)) {
                     Text("Cabang HP ini", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
                     Spacer(Modifier.height(4.dp))
-                    if (state.namaCabang != null) {
+                    if (lewatUndangan) {
+                        Text("${state.konfigurasi.namaCabang} (${state.konfigurasi.kodeDokumen})")
+                    } else if (state.namaCabang != null) {
                         Text("${state.namaCabang} (${RekapHarianLogic.bersihkanKode(state.kodeCabang)})")
                     } else {
                         Text(
@@ -229,7 +271,56 @@ fun PantauCabangScreen(viewModel: PantauCabangViewModel = hiltViewModel()) {
                 }
             }
 
-            // 2. Akun Firebase
+            // 2. Terhubung lewat undangan, atau gabung dengan kode undangan
+            if (lewatUndangan) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Terhubung ke toko", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
+                        Text(
+                            "HP ini bergabung lewat kode undangan dari pemilik toko. Tidak perlu email atau password.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (!konfirmasiLepas) {
+                            OutlinedButton(onClick = { konfirmasiLepas = true }, enabled = !state.sibuk) { Text("Lepas HP dari toko") }
+                        } else {
+                            Text(
+                                "HP ini tidak bisa mengirim rekap lagi sampai pemilik toko membuat undangan baru. Lanjutkan?",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(onClick = { viewModel.lepaskan(); konfirmasiLepas = false }, enabled = !state.sibuk) { Text("Ya, lepas") }
+                                OutlinedButton(onClick = { konfirmasiLepas = false }) { Text("Batal") }
+                            }
+                        }
+                    }
+                }
+            } else {
+                if (state.emailMasuk == null) {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Gabung dengan kode undangan", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
+                            Text(
+                                "Minta pemilik toko membuat undangan di dashboard Nada Pantau (menu Kelola cabang), " +
+                                    "lalu masukkan kode 10 karakternya di sini.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedTextField(
+                                value = kodeUndangan, onValueChange = { kodeUndangan = it.take(14) },
+                                label = { Text("Kode undangan") }, singleLine = true,
+                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, keyboardType = KeyboardType.Ascii),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Button(
+                                onClick = { viewModel.gabung(kodeUndangan) },
+                                enabled = state.firebaseSiap && !state.sibuk
+                            ) { Text(if (state.sibuk) "Memeriksa..." else "Gabung") }
+                        }
+                    }
+                }
+
+            // Akun Firebase (cara lama: akun email yang dibuat admin)
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Akun Firebase", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
@@ -261,18 +352,20 @@ fun PantauCabangScreen(viewModel: PantauCabangViewModel = hiltViewModel()) {
                         ) { Text("Masuk") }
                     }
                 }
-            }
+            }            }
 
             // 3. Kode toko + saklar otomatis
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Toko & pengiriman otomatis", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
-                    OutlinedTextField(
-                        value = tokoId, onValueChange = { tokoId = it },
-                        label = { Text("Kode Toko") }, singleLine = true,
-                        supportingText = { Text("Tanyakan ke admin (UID akun admin di Firebase).") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    if (!lewatUndangan) {
+                        OutlinedTextField(
+                            value = tokoId, onValueChange = { tokoId = it },
+                            label = { Text("Kode Toko") }, singleLine = true,
+                            supportingText = { Text("Tanyakan ke admin (UID akun admin di Firebase).") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("Kirim rekap otomatis")
@@ -288,10 +381,12 @@ fun PantauCabangScreen(viewModel: PantauCabangViewModel = hiltViewModel()) {
                             enabled = state.firebaseSiap && !state.sibuk
                         )
                     }
-                    OutlinedButton(
-                        onClick = { viewModel.simpanKode(tokoId) },
-                        enabled = state.firebaseSiap && !state.sibuk
-                    ) { Text("Simpan Kode Toko") }
+                    if (!lewatUndangan) {
+                        OutlinedButton(
+                            onClick = { viewModel.simpanKode(tokoId) },
+                            enabled = state.firebaseSiap && !state.sibuk
+                        ) { Text("Simpan Kode Toko") }
+                    }
                 }
             }
 
@@ -308,7 +403,7 @@ fun PantauCabangScreen(viewModel: PantauCabangViewModel = hiltViewModel()) {
                     }
                     Button(
                         onClick = viewModel::kirimSekarang,
-                        enabled = state.firebaseSiap && state.emailMasuk != null &&
+                        enabled = state.firebaseSiap && state.sudahMasuk &&
                             RekapHarianLogic.validasiTokoId(state.konfigurasi.tokoId) == null && !state.sibuk
                     ) { Text(if (state.sibuk) "Mengirim..." else "Kirim rekap sekarang") }
                     Text(

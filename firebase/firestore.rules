@@ -107,9 +107,11 @@ service cloud.firestore {
     // ---------- kode aktivasi (dibuat pengembang lewat Console) ----------
 
     match /aktivasi/{kode} {
-      // Tidak ada yang boleh membaca atau membuat dari aplikasi/dashboard. Pendaftar hanya boleh
-      // "mengklaim" kode lewat update di bawah, sebagai bagian dari batch pendaftaran toko.
-      allow read, create, delete: if false;
+      // Kode dibaca satu per satu (get) oleh pendaftar yang sudah masuk, supaya dashboard tahu batasCabang
+      // untuk disalin ke dokumen toko. Aman karena kode 10 karakter acak; daftar kode tidak boleh dibaca.
+      // Membuat dan menghapus kode hanya lewat Console. Pendaftar hanya boleh "mengklaim" lewat update di bawah.
+      allow get: if masuk();
+      allow list, create, delete: if false;
 
       allow update: if masuk()
         && resource.data.aktif == true
