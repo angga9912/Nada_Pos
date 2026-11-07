@@ -1,4 +1,4 @@
-# Pantau Cabang (Firebase) - Tahap 1, 2, 3A, dan 3B
+# Pantau Cabang (Firebase) - Tahap 1, 2, 3A, 3B, dan 3C
 
 Admin memantau rekap penjualan harian semua cabang dari jarak jauh. Tiap cabang = satu HP.
 Hanya paket **Pro** (`FiturPaket.PANTAU_CABANG`). Aplikasi tetap offline-first: kasir tidak pernah menunggu internet.
@@ -89,3 +89,18 @@ Cara baru yang menggantikan pembuatan akun email per cabang di Firebase Console 
 ### Syarat sekali jalan
 - Firebase Console > Authentication > Sign-in method > aktifkan **Anonymous**.
 - Aturan Firestore terbaru (`firebase/firestore.rules`) sudah dipublikasikan.
+
+## Tahap 3C - halaman penjual untuk membuat Kode Aktivasi
+Kode aktivasi tidak lagi harus dibuat manual di Console. Pengembang memakai `penjual.html` di dashboard Nada Pantau.
+
+- **Siapa penjual:** akun yang punya dokumen `penjual/<uid akun itu>`. Dokumen ini hanya bisa dibuat lewat Console; klien tidak bisa membaca atau menulis koleksi `penjual`, jadi tidak ada yang bisa mengangkat dirinya sendiri menjadi penjual.
+- **Yang boleh dilakukan penjual** (dijaga aturan Firestore): melihat daftar kode, membuat kode (ID 10 huruf besar/angka, `aktif: true`, `batasCabang` bilangan bulat 1-50, `dibuatPada` waktu server, `catatan` opsional maks. 100 karakter), mengaktifkan/menonaktifkan kode dan mengubah catatan, serta menghapus kode yang belum dipakai.
+- **Yang tidak boleh:** membuat kode yang sudah berstatus terpakai, mengubah `batasCabang` atau `dipakaiOleh`, menghapus kode terpakai. Menonaktifkan kode yang sudah dipakai tidak menutup tokonya; untuk menutup toko ubah `toko.aktif` di Console.
+- **Pendaftar** tetap hanya bisa membaca satu kode (`get`) dan mengklaimnya lewat batch pendaftaran, tanpa perlu menjadi penjual.
+
+### Pengaturan sekali jalan
+1. Authentication > Users > tambahkan akun email untuk dirimu (jika belum ada).
+2. Buka `/penjual.html`, masuk, salin UID yang tampil.
+3. Firestore > mulai koleksi `penjual` > ID dokumen = UID tadi > satu field bebas (mis. `aktif` = true).
+4. Publikasikan `firebase/firestore.rules` terbaru (Console > Firestore > Rules > Publish), lalu muat ulang `/penjual.html`.
+

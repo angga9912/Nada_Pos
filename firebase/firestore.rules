@@ -3,7 +3,8 @@ rules_version = '2';
 // Aturan keamanan Nada Pos - Pantau Cabang (Tahap 3A: pendaftaran toko & undangan cabang).
 //
 // STRUKTUR DATA
-//   aktivasi/{KODE}                 -> dibuat PENGEMBANG lewat Firebase Console, satu kode per toko yang dijual.
+//   penjual/{uid}                   -> akun penjual; HANYA dibuat lewat Console. Menentukan siapa yang boleh membuat kode aktivasi.
+//   aktivasi/{KODE}                 -> dibuat PENJUAL (halaman penjual.html atau Console), satu kode per toko yang dijual.
 //        { aktif: bool, batasCabang: number, dipakaiOleh: uid | kosong, dipakaiPada: timestamp }
 //   toko/{tokoId}                   -> tokoId = uid akun pemilik. Dibuat pemilik saat mendaftar (butuh kode aktivasi).
 //        { nama, aktif, batasCabang, kodeAktivasi, dibuatPada }
@@ -39,6 +40,12 @@ service cloud.firestore {
     function pathAnggota(tokoId, uid) {
       return /databases/$(database)/documents/toko/$(tokoId)/anggota/$(uid);
     }
+    // Akun PENJUAL (pengembang): ada dokumen penjual/<uid akun itu>. Dokumen ini hanya bisa dibuat lewat Console;
+    // klien tidak bisa menulis atau membacanya, jadi tidak ada yang bisa mengangkat dirinya sendiri jadi penjual.
+    function penjual() {
+      return masuk() && exists(/databases/$(database)/documents/penjual/$(request.auth.uid));
+    }
+
     function pathAktivasi(kode) {
       return /databases/$(database)/documents/aktivasi/$(kode);
     }
@@ -104,14 +111,41 @@ service cloud.firestore {
         && getAfter(pathAktivasi(kode)).data.dipakaiOleh == uid;
     }
 
-    // ---------- kode aktivasi (dibuat pengembang lewat Console) ----------
+    // ---------- penjual dan kode aktivasi (dikelola pengembang lewat halaman penjual.html / Console) ----------
+
+    // Daftar akun penjual: tidak bisa dibaca atau ditulis dari klien (hanya Console).
+    match /penjual/{uid} {
+      allow read, write: if false;
+    }
 
     match /aktivasi/{kode} {
       // Kode dibaca satu per satu (get) oleh pendaftar yang sudah masuk, supaya dashboard tahu batasCabang
-      // untuk disalin ke dokumen toko. Aman karena kode 10 karakter acak; daftar kode tidak boleh dibaca.
-      // Membuat dan menghapus kode hanya lewat Console. Pendaftar hanya boleh "mengklaim" lewat update di bawah.
+      // untuk disalin ke dokumen toko. Aman karena kode 10 karakter acak; daftar kode hanya untuk penjual.
       allow get: if masuk();
-      allow list, create, delete: if false;
+      allow list: if penjual();
+
+      // Penjual membuat kode baru (halaman penjual.html atau Console): aktif, 1-50 cabang, dibuat sekarang, belum dipakai.
+      allow create: if penjual()
+        && kode.matches('^[A-Z0-9]{10}$')
+        && request.resource.data.keys().hasOnly(['aktif', 'batasCabang', 'catatan', 'dibuatPada'])
+        && request.resource.data.keys().hasAll(['aktif', 'batasCabang', 'dibuatPada'])
+        && request.resource.data.aktif == true
+        && request.resource.data.batasCabang is int
+        && request.resource.data.batasCabang >= 1 && request.resource.data.batasCabang <= 50
+        && request.resource.data.dibuatPada == request.time
+        && (!('catatan' in request.resource.data)
+            || (request.resource.data.catatan is string && request.resource.data.catatan.size() <= 100));
+
+      // Penjual hanya boleh mengaktifkan/menonaktifkan kode dan mengubah catatan. Menonaktifkan kode yang sudah dipakai
+      // tidak menutup toko yang sudah terdaftar (itu diatur lewat toko.aktif di Console).
+      allow update: if penjual()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['aktif', 'catatan'])
+        && request.resource.data.aktif is bool
+        && (!('catatan' in request.resource.data)
+            || (request.resource.data.catatan is string && request.resource.data.catatan.size() <= 100));
+
+      // Hanya kode yang belum dipakai yang boleh dihapus; kode terpakai disimpan sebagai catatan penjualan.
+      allow delete: if penjual() && resource.data.get('dipakaiOleh', null) == null;
 
       allow update: if masuk()
         && resource.data.aktif == true

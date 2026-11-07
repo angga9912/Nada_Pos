@@ -17,6 +17,7 @@ const CABANG_MANUAL = 'cabangManual'; // anggota CABANG buatan manual (kodeDokum
 const CABANG_1 = 'cabang1'; // anggota CABANG hasil undangan (kodeDokumen CBG02)
 const CABANG_BARU = 'cabangBaru'; // akun anonim yang akan bergabung
 const PENDAFTAR = 'pendaftarBaru';
+const PENJUAL = 'akunPenjual'; // pengembang: punya dokumen penjual/<uid> (dibuat lewat Console)
 const ORANG_ASING = 'orangAsing';
 
 const JAM = 3600 * 1000;
@@ -57,6 +58,7 @@ beforeEach(async () => {
     await setDoc(doc(db, 'aktivasi', 'BARU000002'), { aktif: true, batasCabang: 5 });
     await setDoc(doc(db, 'aktivasi', 'PAKAI00001'), { aktif: true, batasCabang: 2, dipakaiOleh: 'orangLain' });
     await setDoc(doc(db, 'aktivasi', 'MATI000001'), { aktif: false, batasCabang: 2 });
+    await setDoc(doc(db, 'penjual', PENJUAL), { aktif: true });
 
     const undangan = (kode, extra) => setDoc(doc(db, 'undangan', kode), {
       tokoId: PEMILIK_A, kodeDokumen: 'CBG03', namaCabang: 'Cabang Tiga',
@@ -457,5 +459,76 @@ describe('rekap harian', () => {
     await assertFails(setDoc(doc(db, 'toko', ORANG_ASING, 'rekap', '2026-11-03_X'), rekap('X')));
     await assertFails(setDoc(doc(db, 'toko', ORANG_ASING, 'anggota', 'siapa'), { peran: 'ADMIN', kodeDokumen: 'X' }));
     await assertFails(setDoc(doc(db, 'undangan', 'ABCDE12345'), dataUndangan({ tokoId: ORANG_ASING })));
+  });
+});
+
+describe('penjual: membuat dan mengelola kode aktivasi', () => {
+  const kodeBaru = (extra) => ({ aktif: true, batasCabang: 3, catatan: 'Toko Sinar', dibuatPada: serverTimestamp(), ...extra });
+  const buat = (db, id, data) => setDoc(doc(db, 'aktivasi', id), data);
+
+  it('penjual boleh membuat kode aktivasi yang sah', async () => {
+    const db = dbOf(PENJUAL);
+    await assertSucceeds(buat(db, 'ABCDE23456', kodeBaru()));
+    const { catatan, ...tanpaCatatan } = kodeBaru(); // catatan bersifat opsional
+    await assertSucceeds(buat(db, 'FGHJK23456', tanpaCatatan));
+  });
+
+  it('penjual boleh melihat daftar kode; bukan penjual tidak boleh', async () => {
+    await assertSucceeds(getDocs(collection(dbOf(PENJUAL), 'aktivasi')));
+    await assertFails(getDocs(collection(dbOf(PEMILIK_A), 'aktivasi')));
+    await assertFails(getDocs(collection(dbOf(PENDAFTAR), 'aktivasi')));
+    await assertFails(getDocs(collection(dbTamu(), 'aktivasi')));
+  });
+
+  it('bukan penjual tidak bisa membuat, mengubah, atau menghapus kode', async () => {
+    for (const uid of [PEMILIK_A, PENDAFTAR, ORANG_ASING]) {
+      const db = dbOf(uid);
+      await assertFails(buat(db, 'ABCDE23456', kodeBaru()));
+      await assertFails(updateDoc(doc(db, 'aktivasi', 'BARU000001'), { aktif: false }));
+      await assertFails(deleteDoc(doc(db, 'aktivasi', 'BARU000001')));
+    }
+    await assertFails(buat(dbTamu(), 'ABCDE23456', kodeBaru()));
+  });
+
+  it('kode yang dibuat penjual ditolak bila bentuknya salah', async () => {
+    const db = dbOf(PENJUAL);
+    await assertFails(buat(db, 'ABCDE2345', kodeBaru())); // 9 karakter
+    await assertFails(buat(db, 'abcde23456', kodeBaru())); // huruf kecil
+    await assertFails(buat(db, 'ABCDE23456', kodeBaru({ batasCabang: 0 })));
+    await assertFails(buat(db, 'ABCDE23456', kodeBaru({ batasCabang: 51 })));
+    await assertFails(buat(db, 'ABCDE23456', kodeBaru({ batasCabang: 2.5 })));
+    await assertFails(buat(db, 'ABCDE23456', kodeBaru({ batasCabang: '3' })));
+    await assertFails(buat(db, 'ABCDE23456', kodeBaru({ aktif: false })));
+    await assertFails(buat(db, 'ABCDE23456', kodeBaru({ dibuatPada: Timestamp.now() }))); // bukan waktu server
+    await assertFails(buat(db, 'ABCDE23456', kodeBaru({ dipakaiOleh: PENJUAL }))); // langsung "terpakai"
+    await assertFails(buat(db, 'ABCDE23456', kodeBaru({ catatan: 'x'.repeat(101) })));
+    await assertFails(buat(db, 'ABCDE23456', kodeBaru({ lain: 1 })));
+  });
+
+  it('penjual boleh menonaktifkan kode, tetapi tidak boleh mengubah batas atau pemakainya', async () => {
+    const db = dbOf(PENJUAL);
+    await assertSucceeds(updateDoc(doc(db, 'aktivasi', 'BARU000001'), { aktif: false }));
+    await assertSucceeds(updateDoc(doc(db, 'aktivasi', 'MATI000001'), { aktif: true, catatan: 'diaktifkan lagi' }));
+    await assertFails(updateDoc(doc(db, 'aktivasi', 'BARU000002'), { batasCabang: 99 }));
+    await assertFails(updateDoc(doc(db, 'aktivasi', 'BARU000002'), { dipakaiOleh: PENJUAL }));
+    await assertFails(updateDoc(doc(db, 'aktivasi', 'BARU000002'), { aktif: 'ya' }));
+  });
+
+  it('penjual hanya boleh menghapus kode yang belum dipakai', async () => {
+    const db = dbOf(PENJUAL);
+    await assertSucceeds(deleteDoc(doc(db, 'aktivasi', 'BARU000001')));
+    await assertFails(deleteDoc(doc(db, 'aktivasi', 'PAKAI00001')));
+  });
+
+  it('daftar penjual tidak bisa dibaca atau diubah dari klien (tidak ada yang bisa mengangkat diri jadi penjual)', async () => {
+    await assertFails(getDoc(doc(dbOf(PENJUAL), 'penjual', PENJUAL)));
+    await assertFails(setDoc(doc(dbOf(PENDAFTAR), 'penjual', PENDAFTAR), { aktif: true }));
+    await assertFails(setDoc(doc(dbOf(PENJUAL), 'penjual', ORANG_ASING), { aktif: true }));
+    // setelah mencoba, pendaftar tetap tidak bisa membuat kode
+    await assertFails(buat(dbOf(PENDAFTAR), 'ABCDE23456', kodeBaru()));
+  });
+
+  it('pendaftaran toko oleh pelanggan tetap jalan dan tidak butuh status penjual', async () => {
+    await assertSucceeds(daftar(dbOf(PENDAFTAR), PENDAFTAR, 'BARU000001'));
   });
 });
