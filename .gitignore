@@ -9,6 +9,7 @@ keystore.properties
 *.jks
 *.p12
 license.private
+license.trial.private
 license.secret*
 
 # Gradle files
