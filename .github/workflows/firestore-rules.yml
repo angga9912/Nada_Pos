@@ -1,0 +1,31 @@
+name: Uji aturan Firestore
+
+on:
+  push:
+    paths:
+      - 'firebase/**'
+      - '.github/workflows/firestore-rules.yml'
+  pull_request:
+    paths:
+      - 'firebase/**'
+  workflow_dispatch:
+
+jobs:
+  uji:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Pasang dependensi uji
+        working-directory: firebase/test
+        run: npm install --no-audit --no-fund
+      - name: Jalankan uji di emulator Firestore
+        working-directory: firebase/test
+        run: npx firebase emulators:exec --only firestore --project demo-nadapos "npm test"
