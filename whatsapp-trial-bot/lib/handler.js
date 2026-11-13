@@ -1,6 +1,6 @@
 // Logika inti webhook, murni (tanpa bergantung pada Vercel) supaya bisa diuji.
 import { buatKodeTrial, cariDeviceId, cariTierDiminta, tampilDeviceId } from './license.js';
-import { ambilPesan, kirimTeks, samaAman, tandaTanganWebhookValid } from './whatsapp.js';
+import { ambilPesan, ambilStatus, kirimTeks, samaAman, tandaTanganWebhookValid } from './whatsapp.js';
 import {
   TEKS_BATAS_NOMOR, TEKS_BUKAN_TEKS, TEKS_PENUH_HARI_INI, TEKS_SUDAH_PERNAH, teksKode, teksSambutan,
 } from './teks.js';
@@ -36,7 +36,10 @@ function tanggalKunci(sekarang) {
 /** Proses satu pesan masuk. Melempar error bila balasan gagal terkirim (semua pembatasan dikembalikan). */
 async function tanganiPesan(pesan, { config, store, privateKey, kirim, sekarang }) {
   const kunciPesan = `msg:${pesan.id}`;
-  if (!(await store.setNX(kunciPesan, '1', 2 * HARI))) return; // sudah diproses (Meta mengirim ulang)
+  if (!(await store.setNX(kunciPesan, '1', 2 * HARI))) {
+    console.log(`Pesan ${pesan.id} dilewati: sudah pernah diproses (Meta mengirim ulang)`);
+    return;
+  }
 
   const batal = [];
   // Idempoten: setiap langkah pembatalan hanya dijalankan sekali, walau dipanggil lagi dari catch di bawah.
@@ -115,8 +118,14 @@ export async function handleWebhook({ method, query = {}, rawBody, headers = {},
   }
   if (method !== 'POST') return teks(405, 'Method Not Allowed');
 
-  if (!config.appSecret) return teks(500, 'Server belum dikonfigurasi (WHATSAPP_APP_SECRET)');
-  if (!tandaTanganWebhookValid(rawBody, headers['x-hub-signature-256'], config.appSecret)) return teks(401, 'Invalid signature');
+  if (!config.appSecret) {
+    console.error('Webhook ditolak: WHATSAPP_APP_SECRET belum diisi');
+    return teks(500, 'Server belum dikonfigurasi (WHATSAPP_APP_SECRET)');
+  }
+  if (!tandaTanganWebhookValid(rawBody, headers['x-hub-signature-256'], config.appSecret)) {
+    console.error('Webhook ditolak: tanda tangan tidak cocok (cek WHATSAPP_APP_SECRET di Vercel sama dengan App Secret di Meta)');
+    return teks(401, 'Invalid signature');
+  }
 
   let payload;
   try {
@@ -125,12 +134,25 @@ export async function handleWebhook({ method, query = {}, rawBody, headers = {},
     return teks(400, 'Bad Request');
   }
 
-  const kirim = (to, body) => kirimTeks({
-    fetchFn, token: config.accessToken, phoneNumberId: config.phoneNumberId, versi: config.apiVersion, to, body,
-  });
+  const kirim = async (to, body) => {
+    const wamid = await kirimTeks({
+      fetchFn, token: config.accessToken, phoneNumberId: config.phoneNumberId, versi: config.apiVersion, to, body,
+    });
+    console.log(`Balasan diterima Meta untuk dikirim, id=${wamid ?? '?'}`); // tanpa isi balasan atau kode
+  };
+
+  // Status pengiriman dari Meta (sent/delivered/read/failed): dicatat supaya kegagalan antar-pesan terlihat.
+  const daftarStatus = ambilStatus(payload);
+  for (const st of daftarStatus) {
+    const rincian = st.errorKode == null ? '' : ` error=${st.errorKode} ${st.errorJudul} ${st.errorRincian}`.trimEnd();
+    console.log(`[status] ${st.status} id=${st.id}${rincian}`);
+  }
+  const daftarPesan = ambilPesan(payload);
+  console.log(`Webhook POST diterima: ${daftarPesan.length} pesan, ${daftarStatus.length} status`);
 
   let gagal = false;
-  for (const pesan of ambilPesan(payload)) {
+  for (const pesan of daftarPesan) {
+    console.log(`Pesan masuk ${pesan.id} tipe=${pesan.type}`);
     try {
       await tanganiPesan(pesan, { config, store, privateKey, kirim, sekarang: sekarang() });
     } catch (e) {
