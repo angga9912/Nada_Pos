@@ -43,4 +43,27 @@ export async function kirimTeks({ fetchFn = fetch, token, phoneNumberId, versi =
     const detail = (await res.text().catch(() => '')).slice(0, 300);
     throw new Error(`Kirim WhatsApp gagal (${res.status}): ${detail}`);
   }
+  // ID pesan keluar dari Meta (wamid...), untuk mencocokkan dengan status pengiriman di log.
+  const data = typeof res.json === 'function' ? await res.json().catch(() => null) : null;
+  return data?.messages?.[0]?.id ?? null;
+}
+
+/** Ambil status pengiriman (sent/delivered/read/failed) dari payload webhook, tanpa recipient_id atau isi pesan. */
+export function ambilStatus(payload) {
+  const hasil = [];
+  for (const entry of payload?.entry ?? []) {
+    for (const change of entry?.changes ?? []) {
+      for (const s of change?.value?.statuses ?? []) {
+        const err = s?.errors?.[0];
+        hasil.push({
+          id: String(s?.id ?? ''),
+          status: String(s?.status ?? ''),
+          errorKode: err?.code ?? null,
+          errorJudul: err ? String(err.title ?? err.message ?? '').slice(0, 120) : '',
+          errorRincian: err ? String(err.error_data?.details ?? '').slice(0, 200) : '',
+        });
+      }
+    }
+  }
+  return hasil;
 }
